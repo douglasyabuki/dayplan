@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-geist-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -127,4 +127,123 @@
   html {
     @apply font-sans;
   }
+}
+
+/* Shared semantic colors for projects, priorities, and calendar events. */
+:root {
+  --primary: oklch(0.55 0.2 278);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.65 0.17 278);
+  --foreground: oklch(0.27 0.02 270);
+  --muted-foreground: oklch(0.55 0.018 270);
+  --border: oklch(0.935 0.005 270);
+  --sidebar: oklch(0.98 0.005 270);
+  --accent: oklch(0.955 0.022 278);
+  --accent-foreground: oklch(0.5 0.18 278);
+  --indigo: oklch(0.59 0.18 278);
+  --emerald: oklch(0.6 0.12 166);
+  --amber: oklch(0.7 0.14 75);
+  --rose: oklch(0.63 0.17 20);
+  --sky: oklch(0.64 0.13 235);
+  --violet: oklch(0.61 0.17 307);
+  --focus-surface: oklch(0.977 0.014 278);
+}
+.dark {
+  --background: oklch(0.18 0.012 270);
+  --foreground: oklch(0.93 0.006 270);
+  --card: oklch(0.21 0.013 270);
+  --popover: oklch(0.22 0.012 270);
+  --popover-foreground: var(--foreground);
+  --muted: oklch(0.25 0.016 270);
+  --muted-foreground: oklch(0.68 0.015 270);
+  --sidebar: oklch(0.16 0.013 270);
+  --border: oklch(0.29 0.016 270);
+  --input: oklch(0.33 0.016 270);
+  --primary: oklch(0.72 0.16 278);
+  --primary-foreground: oklch(0.19 0.03 278);
+  --accent: oklch(0.29 0.045 278);
+  --accent-foreground: oklch(0.79 0.1 278);
+  --focus-surface: oklch(0.225 0.032 278);
+  --secondary: oklch(0.27 0.015 270);
+  --secondary-foreground: var(--foreground);
+  color-scheme: dark;
+}
+[data-color="indigo"] {
+  --entity-color: var(--indigo);
+}
+[data-color="emerald"] {
+  --entity-color: var(--emerald);
+}
+[data-color="amber"] {
+  --entity-color: var(--amber);
+}
+[data-color="rose"] {
+  --entity-color: var(--rose);
+}
+[data-color="sky"] {
+  --entity-color: var(--sky);
+}
+[data-color="violet"] {
+  --entity-color: var(--violet);
+}
+[data-priority="high"] {
+  --priority-color: var(--rose);
+}
+[data-priority="medium"] {
+  --priority-color: var(--amber);
+}
+[data-priority="low"] {
+  --priority-color: var(--sky);
+}
+[data-priority="none"] {
+  --priority-color: var(--border);
+}
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+  }
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.app-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--border) 85%, transparent)
+    transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--border) 90%, transparent);
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background-clip: content-box;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(
+    in oklab,
+    var(--muted-foreground) 45%,
+    transparent
+  );
 }
