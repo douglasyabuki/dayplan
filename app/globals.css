@@ -247,3 +247,7 @@
     transparent
   );
 }
+
+.app-scrollbar [data-slot="scroll-area-viewport"] {
+  scrollbar-color: auto;
+}
