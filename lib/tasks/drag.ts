@@ -1,0 +1,270 @@
+import { taskIndex } from "./hierarchy";
+import {
+  occurrenceParent,
+  reference,
+  referenceKey,
+  resolveOccurrence,
+} from "./recurrence";
+import type { Occurrence, Section, TaskReference, Workspace } from "./types";
+
+/** Nest only over a narrow title band; the remaining card area reorders. */
+export function taskPointerIntent(
+  point: { x: number; y: number },
+  title: { left: number; top: number; width: number; height: number },
+  retainInside = false,
+): "before" | "after" | "inside" {
+  const middle = title.top + title.height / 2;
+  const entryBand = Math.min(6, title.height * 0.15);
+  // Once nesting is shown, give the pointer a wider exit band so tiny movements
+  // around the title center don't immediately turn the target into a reorder.
+  const halfBand = retainInside
+    ? Math.max(entryBand, Math.min(14, title.height * 0.75))
+    : entryBand;
+  if (
+    title.width > 0 &&
+    title.height > 0 &&
+    point.x >= title.left &&
+    point.x <= title.left + Math.min(title.width, 240) &&
+    Math.abs(point.y - middle) <= halfBand
+  )
+    return "inside";
+  return point.y < middle ? "before" : "after";
+}
+
+export function insertion(
+  ids: string[],
+  sourceId: string,
+  targetId?: string,
+  after = false,
+) {
+  if (sourceId === targetId) return null;
+  const remaining = ids.filter((id) => id !== sourceId);
+  const targetIndex = targetId ? remaining.indexOf(targetId) : -1;
+  if (targetId !== undefined && targetIndex < 0) return null;
+  const index =
+    targetIndex < 0 ? remaining.length : targetIndex + Number(after);
+  const next = [...remaining];
+  next.splice(index, 0, sourceId);
+  if (next.length === ids.length && next.every((id, i) => id === ids[i]))
+    return null;
+  return { ids: next, beforeId: remaining[index], index };
+}
+export type DragDestination = {
+  kind: "section" | "task";
+  intent?: "before" | "after" | "inside" | "location";
+  targetId?: string;
+  parentRef?: TaskReference | null;
+  projectId?: string | null;
+  sectionId?: string | null;
+  ids: string[];
+  beforeId?: string;
+};
+
+/** Reorder mounted siblings only; changing parents during a drag unregisters its source. */
+export function previewOrder<T extends { id: string }>(
+  items: T[],
+  destination: DragDestination | null,
+) {
+  if (!destination || destination.intent === "inside") return items;
+  const ids = new Set(items.map((item) => item.id));
+  if (
+    destination.ids.length !== items.length ||
+    destination.ids.some((id) => !ids.has(id))
+  )
+    return items;
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return destination.ids.map((id) => byId.get(id)!);
+}
+
+/** Incoming cards are presentation-only, so the active sortable stays mounted. */
+export function taskPreviewEntries(
+  items: Occurrence[],
+  source: Occurrence | undefined,
+  destination: DragDestination | null,
+  location?: {
+    parentRef?: TaskReference | null;
+    projectId: string | null;
+    sectionId: string | null;
+  },
+) {
+  const normal = () =>
+    previewOrder(items, destination).map((task) => ({ task, preview: false }));
+  if (
+    !source ||
+    destination?.kind !== "task" ||
+    destination.intent === "inside" ||
+    items.some((t) => t.id === source.id)
+  )
+    return normal();
+  const matches = location
+    ? location.parentRef
+      ? !!destination.parentRef &&
+        referenceKey(location.parentRef) === referenceKey(destination.parentRef)
+      : !destination.parentRef &&
+        location.projectId === destination.projectId &&
+        location.sectionId === destination.sectionId
+    : items.some((t) => t.id === destination.targetId);
+  if (!matches) return normal();
+  const entries = items.map((task) => ({ task, preview: false }));
+  // Hidden siblings do not have slots; find the next visible sibling in the
+  // proposed order, or append when this is an empty/filtered destination.
+  const following = destination.ids.slice(
+    destination.ids.indexOf(source.id) + 1,
+  );
+  const before = following.find((id) => items.some((t) => t.id === id));
+  const index = before
+    ? entries.findIndex((entry) => entry.task.id === before)
+    : entries.length;
+  entries.splice(index, 0, { task: source, preview: true });
+  return entries;
+}
+export function dragDestination({
+  sourceData,
+  data,
+  after,
+  intent,
+  manual,
+  sections,
+  projectId,
+  allTasks,
+  visible,
+  canceled = false,
+  previous = null,
+  state,
+}: {
+  sourceData: Record<string, unknown> | null;
+  data: Record<string, unknown> | null;
+  after: boolean;
+  intent?: "before" | "after" | "inside";
+  manual: boolean;
+  sections: Section[];
+  projectId: string | null;
+  allTasks: Occurrence[];
+  visible: Occurrence[];
+  groups?: [string, Occurrence[]][];
+  canceled?: boolean;
+  previous?: DragDestination | null;
+  state: Workspace;
+}): DragDestination | null {
+  if (canceled || !sourceData || !data) return null;
+  if (sourceData.kind === "section") {
+    if (data.kind !== "section" || !data.sectionId) return null;
+    if (sourceData.sectionId === data.sectionId)
+      return previous?.kind === "section" ? previous : null;
+    const ids = sections
+      .filter((s) => s.projectId === projectId)
+      .sort((a, b) => a.order - b.order)
+      .map((s) => s.id);
+    const result = insertion(
+      ids,
+      String(sourceData.sectionId),
+      String(data.sectionId),
+      after,
+    );
+    return result ? { kind: "section", ...result } : null;
+  }
+  const task = allTasks.find((t) => t.id === sourceData.taskId);
+  if (!task || task.archived) return null;
+  const target = allTasks.find((t) => t.id === data.taskId);
+  if (target?.id === task.id) {
+    // Only a sibling preview actually moves the mounted source. For every
+    // other destination, hitting its original card means abandoning that move.
+    if (
+      data.kind === "task-children" ||
+      previous?.kind !== "task" ||
+      previous.intent === "inside"
+    )
+      return null;
+    const parent = occurrenceParent(state, task);
+    const sameParent = parent
+      ? !!previous.parentRef &&
+        referenceKey(parent) === referenceKey(previous.parentRef)
+      : !previous.parentRef;
+    return sameParent &&
+      previous.projectId === task.projectId &&
+      previous.sectionId === task.sectionId
+      ? previous
+      : null;
+  }
+  let parentRef: TaskReference | null = null;
+  let destinationProject =
+    data.kind === "section-remove"
+      ? task.projectId
+      : data.projectId === undefined
+        ? projectId
+        : (data.projectId as string | null);
+  let sectionId = (data.sectionId as string | null) ?? null;
+  const targetIntent = target
+    ? data.kind === "task-children"
+      ? "inside"
+      : (intent ?? (after ? "after" : "before"))
+    : "location";
+  if (target) {
+    if (target.id === task.id || target.archived) return null;
+    const index = taskIndex(state.tasks);
+    if (
+      target.taskId === task.taskId ||
+      index.ancestors(target.taskId).some((t) => t.id === task.taskId)
+    )
+      return null;
+    parentRef =
+      targetIntent === "inside"
+        ? reference(target)
+        : occurrenceParent(state, target);
+    // Occurrence-only parent placements are not present in the template tree.
+    let ancestor = parentRef ? resolveOccurrence(state, parentRef) : undefined;
+    const seen = new Set<string>();
+    while (ancestor) {
+      if (ancestor.taskId === task.taskId || seen.has(ancestor.id)) return null;
+      seen.add(ancestor.id);
+      const parent = occurrenceParent(state, ancestor);
+      ancestor = parent ? resolveOccurrence(state, parent) : undefined;
+    }
+    destinationProject = target.projectId;
+    sectionId = target.sectionId;
+  } else if (
+    !["section-target", "section-remove", "project"].includes(String(data.kind))
+  )
+    return null;
+  if (
+    sectionId &&
+    !sections.some(
+      (s) => s.id === sectionId && s.projectId === destinationProject,
+    )
+  )
+    return null;
+  const siblings = allTasks
+    .filter((t) => {
+      const parent = occurrenceParent(state, t);
+      return parentRef
+        ? !!parent && referenceKey(parent) === referenceKey(parentRef)
+        : !parent &&
+            !t.parentId &&
+            t.projectId === destinationProject &&
+            t.sectionId === sectionId;
+    })
+    .sort((a, b) => a.order - b.order);
+  if (targetIntent === "before" || targetIntent === "after") {
+    if (!parentRef && !manual) return null;
+    // A visible nested list supplies its complete children, whereas filtered root lists do not.
+    if (siblings.some((t) => !visible.some((v) => v.id === t.id))) return null;
+  }
+  const result = insertion(
+    siblings.map((t) => t.id),
+    task.id,
+    targetIntent === "before" || targetIntent === "after"
+      ? target?.id
+      : undefined,
+    targetIntent === "after",
+  );
+  if (!result) return null;
+  return {
+    kind: "task",
+    intent: targetIntent,
+    targetId: target?.id,
+    parentRef,
+    projectId: destinationProject,
+    sectionId,
+    ...result,
+  };
+}
