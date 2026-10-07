@@ -7,10 +7,11 @@ import {
   daily,
   domain as d,
   get,
+  getMaybe,
   ref,
   state,
   task,
-} from "./task-fixtures.ts";
+} from "./task-fixtures";
 
 test("location is derived, and moving a root does not rewrite descendants", () => {
   const s = state([task("a"), child("b", "a"), child("c", "b")]);
@@ -87,8 +88,14 @@ test("delete removes the subtree and Undo restores the exact previous workspace"
 test("new storage ignores legacy keys and round trips the new schema", () => {
   const values = new Map([["dayplan.workspace.v1", "not json"]]);
   globalThis.localStorage = {
+    length: values.size,
+    clear: () => values.clear(),
     getItem: (key) => values.get(key) ?? null,
-    setItem: (key, value) => values.set(key, value),
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
   };
   assert.equal(d.readWorkspace(), null);
   const s = state([task("a"), child("b", "a")]);
@@ -220,7 +227,7 @@ test("detachment suppresses one inherited subtree and excludes independent conte
   );
   assert.equal(result.state.tasks.length, 6);
   assert.equal(result.root.parentId, null);
-  assert.equal(get(result.state, "b", "a"), undefined);
+  assert.equal(getMaybe(result.state, "b", "a"), undefined);
   assert.ok(get(result.state, "b", "a", "2026-10-03"));
   assert.ok(get(result.state, "independent", "independent"));
   assert.equal(get(result.state, "new2").parentId, "new1");

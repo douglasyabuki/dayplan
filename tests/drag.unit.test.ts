@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { child, domain as d, get, ref, state, task } from "./task-fixtures.ts";
+import { child, domain as d, get, ref, state, task } from "./task-fixtures";
 
 test("pointer nesting is limited to the title center, excluding controls and trailing whitespace", () => {
   const title = { left: 40, top: 100, width: 500, height: 20 };
@@ -115,7 +115,7 @@ test("inside populated parent advertises and commits a child destination", () =>
   assert.equal(dest.intent, "inside");
   assert.deepEqual(dest.parentRef, ref("b"));
   const moved = d.reducer(s, { type: "moveTask", task: get(s, "a"), ...dest });
-  assert.equal(moved.tasks.find((t) => t.id === "a").parentId, "b");
+  assert.equal(moved.tasks.find((t) => t.id === "a")!.parentId, "b");
   assert.equal(get(moved, "a").sectionId, "a");
   assert.deepEqual(
     d
@@ -183,9 +183,9 @@ test("detach adopts section or Unsectioned and preserves descendants", () => {
       projectId: "p",
       sectionId,
     });
-    assert.equal(moved.tasks.find((t) => t.id === "b").parentId, null);
+    assert.equal(moved.tasks.find((t) => t.id === "b")!.parentId, null);
     assert.equal(get(moved, "c").sectionId, sectionId);
-    assert.equal(moved.tasks.find((t) => t.id === "c").parentId, "b");
+    assert.equal(moved.tasks.find((t) => t.id === "c")!.parentId, "b");
   }
 });
 test("manual child reordering does not detach or change unrelated sibling ranks", () => {

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { child, domain as d, get, ref, state, task } from "./task-fixtures.ts";
+import type { DragDestination } from "../lib/tasks/drag";
+import type { Occurrence, Workspace } from "../lib/tasks/types";
+import { child, domain as d, get, ref, state, task } from "./task-fixtures";
 
 const initial = state([
   ...[null, "a", "b"].flatMap((sectionId) => {
@@ -24,9 +26,14 @@ const initial = state([
   child("deep-leaf", "deep-source"),
   child("deep-last", "child-last", { order: 2 }),
 ]);
-const expand = (s) => d.expandTasks(s, "2026-10-01", "2026-10-02");
+const expand = (s: Workspace) => d.expandTasks(s, "2026-10-01", "2026-10-02");
 const all = expand(initial);
-const destination = (source, data, options = {}, workspace = initial) =>
+const destination = (
+  source: string,
+  data: Record<string, unknown> | null,
+  options: Record<string, unknown> = {},
+  workspace: Workspace = initial,
+): DragDestination | null =>
   d.dragDestination({
     sourceData: { kind: "section-task", taskId: get(workspace, source).id },
     data,
@@ -39,9 +46,15 @@ const destination = (source, data, options = {}, workspace = initial) =>
     state: workspace,
     ...options,
   });
-const card = (id) => ({ kind: "section-task", taskId: get(initial, id).id });
-const section = (sectionId) => ({ kind: "section-target", sectionId });
-const commit = (source, dest) =>
+const card = (id: string) => ({
+  kind: "section-task",
+  taskId: get(initial, id).id,
+});
+const section = (sectionId: string | null) => ({
+  kind: "section-target",
+  sectionId,
+});
+const commit = (source: string, dest: DragDestination | null) =>
   dest
     ? d.reducer(initial, {
         type: "moveTask",
@@ -82,7 +95,7 @@ for (const source of sources) {
         assert.equal(result.sectionId, dest.sectionId);
         assert.equal(result.projectId, dest.projectId);
         const siblings = expand(moved)
-          .filter((t) => {
+          .filter((t: Occurrence) => {
             const parent = d.occurrenceParent(moved, t);
             return dest.parentRef
               ? parent &&
@@ -92,9 +105,9 @@ for (const source of sources) {
                   t.sectionId === dest.sectionId &&
                   t.projectId === dest.projectId;
           })
-          .sort((a, b) => a.order - b.order);
+          .sort((a: Occurrence, b: Occurrence) => a.order - b.order);
         assert.deepEqual(
-          siblings.map((t) => t.id),
+          siblings.map((t: Occurrence) => t.id),
           dest.ids,
         );
         const leaf = get(moved, source.replace("source", "leaf"));
@@ -159,10 +172,10 @@ test("cross-section positions replace each other, and an original no-op clears t
     ["a-last", "after"],
   ]) {
     previous = destination(source, card(target), { intent, previous });
-    assert.equal(previous.targetId, get(initial, target).id);
-    assert.equal(previous.intent, intent);
+    assert.equal(previous!.targetId, get(initial, target).id);
+    assert.equal(previous!.intent, intent);
     assert.equal(
-      get(commit(source, previous), source).sectionId,
+      get(commit(source, previous!), source).sectionId,
       get(initial, target).sectionId,
     );
   }
@@ -178,7 +191,7 @@ test("empty sections accept roots and detached subtasks; returning to an only-ch
   const workspace = state([task("root"), child("nested", "root")]);
   for (const source of ["root", "nested"]) {
     const previous = destination(source, section("b"), {}, workspace);
-    assert.deepEqual(previous.ids, [get(workspace, source).id]);
+    assert.deepEqual(previous!.ids, [get(workspace, source).id]);
     assert.equal(
       destination(
         source,
@@ -197,10 +210,10 @@ test("dropping into the children area always appends as a child", () => {
     { kind: "task-children", taskId: get(initial, "child-last").id },
     { intent: "after" },
   );
-  assert.equal(dest.intent, "inside");
-  assert.deepEqual(dest.parentRef, ref("child-last"));
+  assert.equal(dest!.intent, "inside");
+  assert.deepEqual(dest!.parentRef, ref("child-last"));
   assert.equal(
-    get(commit("b-source", dest), "b-source").parentId,
+    get(commit("b-source", dest!), "b-source").parentId,
     "child-last",
   );
 });
@@ -208,7 +221,7 @@ test("dropping into the children area always appends as a child", () => {
 test("explicit Inbox destinations clear the project and section", () => {
   for (const source of sources) {
     const dest = destination(source, { kind: "project", projectId: null });
-    assert.equal(dest.projectId, null);
+    assert.equal(dest!.projectId, null);
     const moved = commit(source, dest);
     assert.equal(get(moved, source).projectId, null);
     assert.equal(get(moved, source).sectionId, null);
@@ -283,7 +296,11 @@ test("recurring subtasks keep only previews for their own parent occurrence", ()
     child("source", "daily", { order: 1 }),
   ]);
   const source = get(workspace, "source", "daily");
-  const resolve = (data, previous = null, intent = "before") =>
+  const resolve = (
+    data: Record<string, unknown>,
+    previous: DragDestination | null = null,
+    intent: "before" | "after" | "inside" = "before",
+  ) =>
     d.dragDestination({
       sourceData: { taskId: source.id },
       data,
@@ -344,7 +361,11 @@ test("a child placed under an unsectioned recurring parent can be detached", () 
 });
 
 test("section reordering retains only its own preview and cancels cleanly", () => {
-  const resolve = (data, previous = null, canceled = false) =>
+  const resolve = (
+    data: Record<string, unknown> | null,
+    previous: DragDestination | null = null,
+    canceled = false,
+  ) =>
     d.dragDestination({
       sourceData: { kind: "section", sectionId: "a" },
       data,

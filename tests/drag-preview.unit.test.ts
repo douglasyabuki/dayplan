@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { child, domain as d, get, ref, state, task } from "./task-fixtures.ts";
+import type { DragDestination } from "../lib/tasks/drag";
+import { child, domain as d, get, ref, state, task } from "./task-fixtures";
 
 const workspace = state([
   task("source", { sectionId: "a" }),
@@ -12,7 +13,10 @@ const workspace = state([
 ]);
 const source = get(workspace, "source");
 const all = d.expandTasks(workspace, "2026-10-01", "2026-10-02");
-const resolve = (data, intent) =>
+const resolve = (
+  data: Record<string, unknown>,
+  intent: "before" | "after" | "inside",
+): DragDestination | null =>
   d.dragDestination({
     sourceData: { taskId: source.id },
     data,
@@ -32,7 +36,7 @@ test("incoming section previews match the drop order at the start, middle and en
     ["first", "before"],
     ["first", "after"],
     ["last", "after"],
-  ]) {
+  ] as const) {
     const destination = resolve({ taskId: get(workspace, target).id }, intent);
     const preview = d.taskPreviewEntries(roots, source, destination, {
       projectId: "p",
@@ -40,7 +44,7 @@ test("incoming section previews match the drop order at the start, middle and en
     });
     assert.deepEqual(
       preview.map((e) => e.task.id),
-      destination.ids,
+      destination!.ids,
     );
     assert.deepEqual(
       preview.filter((e) => e.preview).map((e) => e.task.id),
@@ -61,7 +65,10 @@ test("incoming section previews match the drop order at the start, middle and en
 });
 
 test("empty sections preview in their own location, while nesting keeps parents unchanged", () => {
-  const destination = resolve({ kind: "section-target", sectionId: null });
+  const destination = resolve(
+    { kind: "section-target", sectionId: null },
+    "after",
+  );
   assert.equal(
     d.taskPreviewEntries([], source, destination, {
       projectId: "p",
@@ -117,13 +124,13 @@ test("nesting preserves existing children while positional moves preview their s
     );
     assert.deepEqual(
       preview.map((e) => e.task.id),
-      destination.intent === "inside"
+      destination!.intent === "inside"
         ? children.map((task) => task.id)
-        : destination.ids,
+        : destination!.ids,
     );
     assert.equal(
       preview.filter((e) => e.preview).length,
-      destination.intent === "inside" ? 0 : 1,
+      destination!.intent === "inside" ? 0 : 1,
     );
     assert.deepEqual(
       d.taskPreviewEntries(children, source, null, location),
@@ -154,7 +161,7 @@ test("grouped views preview only the target group, and sibling previews remain r
       .length,
     1,
   );
-  const local = {
+  const local: DragDestination = {
     kind: "task",
     intent: "before",
     ids: [roots[1].id, roots[0].id],

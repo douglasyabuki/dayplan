@@ -7,10 +7,11 @@ import {
   daily,
   domain as d,
   get,
+  getMaybe,
   ref,
   state,
   task,
-} from "./task-fixtures.ts";
+} from "./task-fixtures";
 
 test("field patches retain immediate completion and Undo state", () => {
   const before = state([task("a"), child("b", "a")]);
@@ -147,7 +148,7 @@ test("series editing shifts dates back to template anchor and preserves exceptio
       "series",
     ),
   );
-  assert.equal(s.tasks[0].schedule.date, "2026-10-02");
+  assert.equal(s.tasks[0]!.schedule!.date, "2026-10-02");
   assert.ok(Object.values(s.exceptions).some((e) => e.overrides.completed));
 });
 test("removing recurrence materializes saved subtree history", () => {
@@ -177,7 +178,7 @@ test("removing recurrence materializes saved subtree history", () => {
     ),
   );
   assert.equal(s.tasks.length, 4);
-  assert.equal(s.tasks.find((t) => t.id === "history2").parentId, "history1");
+  assert.equal(s.tasks.find((t) => t.id === "history2")?.parentId, "history1");
   assert.deepEqual(s.exceptions, {});
 });
 
@@ -210,13 +211,19 @@ test("template child completion and deletion affect only the selected occurrence
     type: "deleteOccurrence",
     ref: ref("a", "a"),
   });
-  assert.equal(get(deleted, "new", "a"), undefined);
+  assert.equal(getMaybe(deleted, "new", "a"), undefined);
   assert.ok(get(deleted, "new", "a", "2026-10-03"));
   assert.ok(get(deleted, "a", "a", "2026-10-03"));
   const values = new Map();
   globalThis.localStorage = {
+    length: values.size,
+    clear: () => values.clear(),
     getItem: (key) => values.get(key) ?? null,
-    setItem: (key, value) => values.set(key, value),
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
   };
   d.writeWorkspace(deleted);
   assert.doesNotThrow(() => d.readWorkspace());
@@ -245,7 +252,7 @@ test("a newly repeating child starts its own context on the parent template", ()
       parentRef: ref("a", "a"),
     },
   });
-  assert.equal(saved.tasks.find((t) => t.id === "new").parentId, "a");
+  assert.equal(saved.tasks.find((t) => t.id === "new")?.parentId, "a");
   assert.equal(d.occurrenceParent(saved, get(saved, "new", "new")), null);
   assert.equal(
     d
