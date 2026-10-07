@@ -1,5 +1,6 @@
 import "./globals.css";
 
+import { cn } from "cn";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
@@ -25,8 +26,19 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={cn(
+        geistSans.variable,
+        geistMono.variable,
+        "h-full antialiased",
+      )}
     >
+      <head>
+        {/* Apply the system theme before paint; saved preferences take over after hydration. */}
+        <script>
+          {`document.documentElement.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches);`}
+        </script>
+      </head>
       <body className="app-scrollbar flex min-h-full flex-col">
         {children}
         <Toaster />
