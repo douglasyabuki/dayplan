@@ -96,10 +96,10 @@ export function useEditorSession(
   function complete(target: Occurrence, completed: boolean) {
     const unsaved = !!entries[target.id]?.isNew;
     if (!unsaved)
-      workspace.act(
+      workspace.operate(
         {
-          type: "complete",
-          ref: reference(target),
+          kind: "complete",
+          task: target,
           completed,
           today: workspace.today,
         },
@@ -275,17 +275,17 @@ export function useTaskEditor(
   }
   function remove() {
     session.confirm({
-      title: "Delete this task and its subtasks?",
+      title:
+        task.context && scope === "series"
+          ? "Delete this series and its subtasks?"
+          : "Delete this task and its subtasks?",
       description:
-        "This removes the selected subtree. You can Undo this action.",
+        task.context && scope === "occurrence"
+          ? "This removes this occurrence and its occurrence subtree. Other occurrences remain. You can Undo this action."
+          : "This removes the selected template subtree, including descendant series and their occurrences. You can Undo this action.",
       action: () => {
         if (!isNew)
-          session.act(
-            task.context && scope !== "series"
-              ? { type: "deleteOccurrence", ref: reference(task) }
-              : { type: "delete", id: task.taskId },
-            "Task deleted",
-          );
+          session.operate({ kind: "delete", task, scope }, "Task deleted");
         const ids = new Set([task.taskId]);
         let more = true;
         while (more) {
@@ -314,9 +314,12 @@ export function useTaskEditor(
       return;
     }
     session.guard(() => {
-      session.act(
-        { type: "archive", id: task.taskId, archived: !task.archived },
-        task.archived ? "Task restored" : "Task archived",
+      const ownArchived = !!session.state.tasks.find(
+        (t) => t.id === task.taskId,
+      )?.archived;
+      session.operate(
+        { kind: "archive", task, archived: !ownArchived },
+        ownArchived ? "Task restored" : "Task archived",
       );
       session.setEntries({});
       close();
@@ -375,6 +378,8 @@ export function useTaskEditor(
     submit,
     remove,
     archive,
+    ownArchived: !!session.state.tasks.find((t) => t.id === task.taskId)
+      ?.archived,
     complete,
     requestClose,
     children,

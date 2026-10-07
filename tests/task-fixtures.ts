@@ -12,6 +12,14 @@ import { join } from "node:path";
 import ts from "typescript";
 import { afterAll } from "vitest";
 
+import type {
+  Occurrence,
+  RecurrenceRule,
+  Task,
+  TaskReference,
+  Workspace,
+} from "../lib/tasks/types";
+
 const directory = mkdtempSync(join(tmpdir(), "dayplan-hierarchy-"));
 for (const file of readdirSync(new URL("../lib/tasks", import.meta.url)).filter(
   (f) => f.endsWith(".ts"),
@@ -32,6 +40,21 @@ for (const file of readdirSync(new URL("../lib/tasks", import.meta.url)).filter(
 
 const require = createRequire(import.meta.url);
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type RuntimeDomain = {
+  [name: string]: any;
+  reducer: (workspace: Workspace, action: any) => Workspace;
+  expandTasks: (...args: any[]) => Occurrence[];
+  occurrenceChildren: (...args: any[]) => Occurrence[];
+  seedWorkspace: (...args: any[]) => Workspace;
+  commitDrafts: (...args: any[]) => Workspace;
+  taskPreviewEntries: (
+    ...args: any[]
+  ) => { task: Occurrence; preview: boolean }[];
+  previewOrder: <T extends { id: string }>(items: T[], destination: any) => T[];
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const domain = Object.assign(
   {},
   ...[
@@ -45,10 +68,10 @@ export const domain = Object.assign(
     "presentation",
     "seed",
   ].map((name) => require(join(directory, name + ".js"))),
-);
+) as RuntimeDomain;
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-export const task = (id, extra = {}) => ({
+export const task = (id: string, extra: Partial<Task> = {}): Task => ({
   id,
   parentId: null,
   title: id,
@@ -64,10 +87,13 @@ export const task = (id, extra = {}) => ({
   ...extra,
 });
 
-export const child = (id, parentId, extra = {}) =>
-  task(id, { parentId, projectId: null, sectionId: null, ...extra });
+export const child = (
+  id: string,
+  parentId: string,
+  extra: Partial<Task> = {},
+): Task => task(id, { parentId, projectId: null, sectionId: null, ...extra });
 
-export const state = (tasks = []) => ({
+export const state = (tasks: Task[] = []): Workspace => ({
   version: 2,
   tasks,
   exceptions: {},
@@ -84,14 +110,35 @@ export const state = (tasks = []) => ({
   theme: "system",
 });
 
-export const daily = { frequency: "daily", weekdays: [] };
+export const daily: RecurrenceRule = { frequency: "daily", weekdays: [] };
 
-export const ref = (taskId, root, date = "2026-10-02") => ({
+export const ref = (
+  taskId: string,
+  root?: string,
+  date = "2026-10-02",
+): TaskReference => ({
   taskId,
   ...(root
     ? { context: { recurrenceRootTaskId: root, occurrenceDate: date } }
     : {}),
 });
 
-export const get = (s, taskId, root, date) =>
+export const get = (
+  s: Workspace,
+  taskId: string,
+  root?: string,
+  date?: string,
+): Occurrence => {
+  const occurrence = domain.resolveOccurrence(s, ref(taskId, root, date));
+  if (!occurrence)
+    throw new Error(`Task ${taskId} was not found in the fixture`);
+  return occurrence;
+};
+
+export const getMaybe = (
+  s: Workspace,
+  taskId: string,
+  root?: string,
+  date?: string,
+): Occurrence | undefined =>
   domain.resolveOccurrence(s, ref(taskId, root, date));

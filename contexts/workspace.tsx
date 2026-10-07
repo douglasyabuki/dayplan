@@ -11,7 +11,11 @@ import {
 } from "react";
 
 import { dateKey } from "@/lib/tasks/dates";
-import { reference } from "@/lib/tasks/recurrence";
+import {
+  taskAction,
+  type TaskOperation,
+  taskOperationAction,
+} from "@/lib/tasks/operations";
 import { seedWorkspace } from "@/lib/tasks/seed";
 import {
   type Action,
@@ -35,6 +39,7 @@ type Context = {
   cancelConfirmation: () => void;
   acceptConfirmation: () => void;
   act: (action: Action, message?: string) => void;
+  operate: (operation: TaskOperation, message?: string) => void;
   save: (task: Occurrence, message?: string) => void;
   toggle: (task: Occurrence) => void;
   confirm: (value: Confirmation) => void;
@@ -121,17 +126,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [notice]);
   function act(action: Action, message?: string) {
+    action = taskAction(state, action);
     if (message) setNotice({ message, before: state });
     dispatch(action);
+  }
+  function operate(operation: TaskOperation, message?: string) {
+    act(taskOperationAction(state, operation), message);
   }
   function save(task: Occurrence, message?: string) {
     act({ type: "occurrence", task }, message);
   }
   function toggle(task: Occurrence) {
-    act(
+    operate(
       {
-        type: "complete",
-        ref: reference(task),
+        kind: "complete",
+        task,
         completed: !task.completed,
         today,
       },
@@ -179,6 +188,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           setConfirmation(null);
         },
         act,
+        operate,
         save,
         toggle,
         confirm: setConfirmation,

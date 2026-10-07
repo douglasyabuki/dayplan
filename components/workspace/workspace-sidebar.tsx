@@ -105,7 +105,7 @@ export function WorkspaceSidebar({
             </Link>
           </SidebarHeader>
 
-          <SidebarContent className="gap-0 overflow-x-hidden pb-3">
+          <SidebarContent className="min-w-0 gap-0 overflow-x-hidden pb-3">
             <SidebarGroup className="px-4 py-0">
               <Button
                 className="w-full justify-start"
@@ -154,7 +154,7 @@ export function WorkspaceSidebar({
               </SidebarGroupContent>
             </SidebarGroup>
 
-            <SidebarSeparator className="mx-5 w-auto" />
+            <SidebarSeparator className="mx-5" />
 
             <SidebarGroup className="px-3 pt-5">
               <SidebarGroupLabel

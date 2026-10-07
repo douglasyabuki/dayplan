@@ -15,6 +15,10 @@ import {
 } from "react";
 
 import type { TaskOpenOptions } from "@/components/tasks/task-item";
+import {
+  type QuickActionKind,
+  TaskQuickActionPopover,
+} from "@/components/tasks/task-quick-actions";
 import { useWorkspace } from "@/contexts/workspace";
 import { addDays, parseDay } from "@/lib/tasks/dates";
 import {
@@ -75,6 +79,48 @@ function useControllerState() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const routeKey = pathname + "?" + searchParams.toString();
+  const [quickAction, setQuickAction] = useState<{
+    task: Occurrence;
+    kind: QuickActionKind;
+    anchor: HTMLElement;
+    routeKey: string;
+  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    id: string;
+    routeKey: string;
+  } | null>(null);
+  function closeTaskActions() {
+    setQuickAction(null);
+    setContextMenu(null);
+  }
+  function showQuickAction(
+    task: Occurrence,
+    kind: QuickActionKind,
+    anchor: HTMLElement,
+  ) {
+    setContextMenu(null);
+    setQuickAction((current) =>
+      current?.task.id === task.id &&
+      current.kind === kind &&
+      current.anchor === anchor
+        ? null
+        : { task, kind, anchor, routeKey },
+    );
+  }
+  useEffect(() => {
+    // Route navigation invalidates anchors and prevents actions from returning on Back.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setQuickAction(null);
+    setContextMenu(null);
+  }, [routeKey]);
+  useEffect(() => {
+    if (quickAction && !resolveOccurrence(state, quickAction.task)) {
+      // A removed occurrence must not reopen if Undo later restores it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQuickAction(null);
+    }
+  }, [state, quickAction]);
   const route = resolveWorkspaceRoute(pathname) ?? { view: "today" as const };
   const { view, selectedId } = route;
   const params = useMemo(
@@ -179,6 +225,7 @@ function useControllerState() {
     else router.push(url, { scroll: false });
   }
   function open(task: Occurrence, options?: TaskOpenOptions) {
+    closeTaskActions();
     const action = () =>
       startTransition(() => {
         setEditorOrigin({ ...options, taskId: task.id });
@@ -194,6 +241,7 @@ function useControllerState() {
     time?: string,
     sectionId: string | null = null,
   ) {
+    closeTaskActions();
     const action = () =>
       startTransition(() => {
         setEditorOrigin(null);
@@ -270,6 +318,7 @@ function useControllerState() {
   const keyboardDirection = useRef<"before" | "after" | "inside">("after");
 
   function dragStart(event: Pick<DragMoveEvent, "operation">) {
+    closeTaskActions();
     dragGeneration.current++;
     const sourceId = event.operation.source?.data.taskId as string | undefined;
     dragDraft.current = { sourceId: sourceId ?? null, destination: null };
@@ -517,6 +566,18 @@ function useControllerState() {
   ].filter((k) => params.get(k));
 
   return {
+    quickAction:
+      quickAction?.routeKey === routeKey &&
+      resolveOccurrence(state, quickAction.task)
+        ? quickAction
+        : null,
+    closeQuickAction: () => setQuickAction(null),
+    showQuickAction,
+    contextMenuId: contextMenu?.routeKey === routeKey ? contextMenu.id : null,
+    setContextMenuId: (id: string | null) => {
+      setContextMenu(id ? { id, routeKey } : null);
+      if (id) setQuickAction(null);
+    },
     state,
     today,
     dragDestination,
@@ -589,6 +650,12 @@ export function WorkspaceController({ children }: { children: ReactNode }) {
   return (
     <ControllerContext.Provider value={controller}>
       {children}
+      {controller.quickAction && (
+        <TaskQuickActionPopover
+          key={`${controller.quickAction.task.id}:${controller.quickAction.kind}`}
+          action={controller.quickAction}
+        />
+      )}
     </ControllerContext.Provider>
   );
 }

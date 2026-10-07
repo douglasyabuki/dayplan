@@ -138,7 +138,8 @@ function TaskEditorPanel({
   const titleRef = useRef<HTMLInputElement>(null);
   const subtaskRef = useRef<HTMLInputElement>(null);
   const { draft, patch } = editor;
-  const initialFocus = () => titleRef.current;
+  const initialFocus = () =>
+    origin?.focusSubtask ? subtaskRef.current : titleRef.current;
   const title = isNew ? "Create task" : "Edit task";
   const body = (
     <>
@@ -451,13 +452,18 @@ function TaskEditorPanel({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={editor.archive}>
-                      {task.archived ? <RotateCcw /> : <Archive />}
-                      {task.archived
-                        ? "Restore task"
-                        : task.context
-                          ? "Archive entire series"
-                          : "Archive task"}
+                    <DropdownMenuItem
+                      disabled={task.archived && !editor.ownArchived}
+                      onClick={editor.archive}
+                    >
+                      {editor.ownArchived ? <RotateCcw /> : <Archive />}
+                      {task.archived && !editor.ownArchived
+                        ? "Archived by parent"
+                        : editor.ownArchived
+                          ? "Restore task"
+                          : task.context
+                            ? "Archive entire series"
+                            : "Archive task"}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       variant="destructive"

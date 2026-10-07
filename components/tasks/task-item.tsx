@@ -1,20 +1,31 @@
 "use client";
 
+import { useMergedRefs } from "@base-ui/utils/useMergedRefs";
 import { KeyboardSensor, PointerSensor } from "@dnd-kit/dom";
 import { SortableKeyboardPlugin } from "@dnd-kit/dom/sortable";
 import { useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import {
+  Archive,
   ArrowDown,
   ArrowUp,
   CalendarDays,
   CalendarX,
+  Check,
   ChevronDown,
+  Copy,
   Flag,
+  Folder,
+  Hash,
   IndentDecrease,
   IndentIncrease,
+  Pencil,
+  Plus,
   Repeat2,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { type ComponentProps, type Ref, useId, useRef, useState } from "react";
 
 import { TagBadge } from "@/components/collections/tag-badge";
@@ -25,9 +36,6 @@ import {
   ContextMenuContent,
   ContextMenuGroup,
   ContextMenuItem,
-  ContextMenuLabel,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
@@ -50,14 +58,15 @@ import {
   scheduleLabel,
 } from "@/lib/tasks/presentation";
 import {
+  asOccurrence,
   occurrenceChildren,
   occurrenceParent,
   reference,
   referenceKey,
 } from "@/lib/tasks/recurrence";
+import { workspaceHref } from "@/lib/tasks/routes";
 import {
   type Occurrence,
-  priorities,
   type Priority,
   type Project,
   type Tag,
@@ -65,8 +74,14 @@ import {
 import { cn } from "@/lib/utils";
 
 import { TaskListPreview } from "./task-drag-feedback";
+import {
+  isTaskInteractive,
+  metadataClass,
+  taskInteractionBoundary,
+} from "./task-interaction";
+import { type QuickActionKind, TaskMetadataButton } from "./task-quick-actions";
 
-export type TaskOpenOptions = { triggerId?: string };
+export type TaskOpenOptions = { triggerId?: string; focusSubtask?: boolean };
 export type OpenTask = (task: Occurrence, options?: TaskOpenOptions) => void;
 
 // Titles remain clickable, but can also start a drag after the sensor threshold.
@@ -74,6 +89,7 @@ export type OpenTask = (task: Occurrence, options?: TaskOpenOptions) => void;
 export const taskCardSensors = [
   PointerSensor.configure({
     preventActivation(event, source) {
+      if (isTaskInteractive(event.target)) return true;
       if (
         event.target instanceof Element &&
         event.target.closest("[data-task-item]") !== source.element
@@ -88,7 +104,12 @@ export const taskCardSensors = [
       return PointerSensor.defaults.preventActivation?.(event, source) ?? false;
     },
   }),
-  KeyboardSensor,
+  KeyboardSensor.configure({
+    preventActivation(event, source) {
+      if (isTaskInteractive(event.target)) return true;
+      return KeyboardSensor.defaults.preventActivation(event, source);
+    },
+  }),
 ];
 
 export function TaskCheckbox({
@@ -145,8 +166,15 @@ export function TaskItem({
   const triggerId = useId();
   const childrenId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const { state } = useWorkspace();
+  const { state, operate } = useWorkspace();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const mergedRef = useMergedRefs(cardRef, itemRef);
   const controller = useWorkspaceController();
+  const ownArchived = !!state.tasks.find((t) => t.id === task.taskId)?.archived;
+  const menuAction = (kind: QuickActionKind) => {
+    if (cardRef.current)
+      controller.showQuickAction(task, kind, cardRef.current);
+  };
   const hierarchical = ["inbox", "projects", "tasks"].includes(controller.view);
   const allChildren = occurrenceChildren(state, task, controller.allTasks);
   const visibleChildren = hierarchical
@@ -155,23 +183,28 @@ export function TaskItem({
       )
     : allChildren;
   const children = visibleChildren;
-  const parentRef = occurrenceParent(state, task);
-  const siblings = controller.allTasks
-    .filter((t) => {
-      const p = occurrenceParent(state, t);
-      return parentRef
-        ? !!p && referenceKey(p) === referenceKey(parentRef)
-        : !p &&
-            !t.parentId &&
-            t.projectId === task.projectId &&
-            t.sectionId === task.sectionId;
-    })
-    .sort((a, b) => a.order - b.order);
-  const siblingIndex = siblings.findIndex((t) => t.id === task.id);
+  const index = taskIndex(state.tasks);
+  const template = index.byId.get(task.taskId)!;
+  const parentRef = template.parentId ? { taskId: template.parentId } : null;
+  // Structural commands order templates, not repeated renderings of one series.
+  const siblings = state.tasks
+    .filter(
+      (t) =>
+        t.parentId === template.parentId &&
+        (template.parentId ||
+          (t.projectId === template.projectId &&
+            t.sectionId === template.sectionId)),
+    )
+    .sort((a, b) => a.order - b.order)
+    .map((t) => asOccurrence({ ...t, ...index.location(t.id) }));
+  const siblingIndex = siblings.findIndex((t) => t.taskId === task.taskId);
   const canReorder =
     hierarchical &&
     (!!parentRef || (controller.params.get("sort") ?? "manual") === "manual") &&
-    siblings.every((t) => controller.hierarchyTasks.some((v) => v.id === t.id));
+    !task.archived &&
+    siblings.every((t) =>
+      controller.hierarchyTasks.some((v) => v.taskId === t.taskId),
+    );
   const moveSibling = (direction: number) => {
     const target = siblings[siblingIndex + direction];
     if (!target || !canReorder) return;
@@ -182,7 +215,7 @@ export function TaskItem({
         parentRef,
         projectId: task.projectId,
         sectionId: task.sectionId,
-        tasks: controller.allTasks,
+        tasks: siblings,
         beforeId: direction < 0 ? target.id : siblings[siblingIndex + 2]?.id,
       },
       "Task moved",
@@ -204,25 +237,23 @@ export function TaskItem({
             "Task nested",
           )
       : undefined;
-  const outdent = parentRef
-    ? () => {
-        const parent = controller.allTasks.find(
-          (t) => t.id === referenceKey(parentRef),
-        );
-        if (parent)
-          controller.act(
-            {
-              type: "moveTask",
-              task,
-              parentRef: occurrenceParent(state, parent),
-              projectId: parent.projectId,
-              sectionId: parent.sectionId,
-              tasks: controller.allTasks,
-            },
-            "Task detached",
-          );
-      }
-    : undefined;
+  const outdent =
+    parentRef && !task.archived
+      ? () => {
+          const parent = index.byId.get(parentRef.taskId);
+          if (parent)
+            controller.act(
+              {
+                type: "moveTask",
+                task,
+                parentRef: parent.parentId ? { taskId: parent.parentId } : null,
+                ...index.location(parent.id),
+                tasks: controller.allTasks,
+              },
+              "Task detached",
+            );
+        }
+      : undefined;
   const complete = allChildren.filter((item) => item.completed).length;
   const inside =
     controller.dragDestination?.kind === "task" &&
@@ -264,11 +295,39 @@ export function TaskItem({
     </Button>
   );
   return (
-    <ContextMenu>
+    <ContextMenu
+      open={controller.contextMenuId === triggerId}
+      onOpenChange={(open) =>
+        controller.setContextMenuId(open ? triggerId : null)
+      }
+    >
       <ContextMenuTrigger
         render={
           <Item
-            ref={itemRef}
+            ref={mergedRef}
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (
+                event.target !== event.currentTarget &&
+                isTaskInteractive(event.target)
+              )
+                return;
+              if (
+                event.key === "ContextMenu" ||
+                (event.shiftKey && event.key === "F10")
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                const rect = event.currentTarget.getBoundingClientRect();
+                event.currentTarget.dispatchEvent(
+                  new MouseEvent("contextmenu", {
+                    bubbles: true,
+                    clientX: rect.left + 16,
+                    clientY: rect.top + 16,
+                  }),
+                );
+              }
+            }}
             role="listitem"
             variant={board ? "outline" : "default"}
             size="xs"
@@ -286,7 +345,8 @@ export function TaskItem({
             )}
             onClick={(event) => {
               event.stopPropagation();
-              if (event.defaultPrevented) return;
+              if (event.defaultPrevented || isTaskInteractive(event.target))
+                return;
               if (
                 !(event.target as HTMLElement).closest(
                   "button,input,a,[role=checkbox],[role=menuitem]",
@@ -360,7 +420,9 @@ export function TaskItem({
                   project) && (
                   <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-4 wrap-anywhere [&_svg]:size-3">
                     {task.deadline && (
-                      <span
+                      <TaskMetadataButton
+                        task={task}
+                        kind="deadline"
                         data-overdue={
                           (!task.completed && task.deadline.date < today) ||
                           undefined
@@ -369,13 +431,17 @@ export function TaskItem({
                       >
                         <CalendarX className="shrink-0" aria-hidden="true" />
                         {deadlineLabel(task.deadline, today)}
-                      </span>
+                      </TaskMetadataButton>
                     )}
                     {task.schedule && (
-                      <span className="flex items-center gap-1">
+                      <TaskMetadataButton
+                        task={task}
+                        kind="schedule"
+                        className="flex items-center gap-1"
+                      >
                         <CalendarDays className="shrink-0" aria-hidden="true" />
                         {scheduleLabel(task.schedule, today)}
-                      </span>
+                      </TaskMetadataButton>
                     )}
                     {task.recurrence && <Repeat2 aria-label="Recurring task" />}
                     {project && <span>{project.name}</span>}
@@ -387,7 +453,14 @@ export function TaskItem({
                   aria-label="Tags"
                 >
                   {tags.map((tag) => (
-                    <TagBadge key={tag.id} tag={tag} compact />
+                    <Link
+                      key={tag.id}
+                      href={workspaceHref({ view: "tags", selectedId: tag.id })}
+                      {...taskInteractionBoundary}
+                      className={cn(metadataClass, "min-w-0 shrink")}
+                    >
+                      <TagBadge tag={tag} compact />
+                    </Link>
                   ))}
                 </div>
               )}
@@ -396,11 +469,16 @@ export function TaskItem({
             {hasActions && (
               <ItemActions className="group-data-board/item:col-start-3 group-data-board/item:row-start-1 group-data-board/item:min-h-6 group-data-board/item:gap-0.5">
                 {task.priority !== "none" && (
-                  <Flag
-                    className="size-3.5 text-(--priority-color)"
-                    data-priority={task.priority}
-                    aria-label={`${task.priority} priority`}
-                  />
+                  <TaskMetadataButton
+                    task={task}
+                    kind="priority"
+                    aria-label={`Priority: ${task.priority}`}
+                  >
+                    <Flag
+                      className="size-3.5 text-(--priority-color)"
+                      data-priority={task.priority}
+                    />
+                  </TaskMetadataButton>
                 )}
               </ItemActions>
             )}
@@ -415,20 +493,26 @@ export function TaskItem({
                   {(timing.scheduled || timing.due || task.recurrence) && (
                     <div className="text-muted-foreground text-[11px] leading-4 wrap-anywhere [&_svg]:size-3 [&_svg]:align-[-2px]">
                       {timing.scheduled && (
-                        <span className={cn(depth >= 1 && "block")}>
+                        <TaskMetadataButton
+                          task={task}
+                          kind="schedule"
+                          className={cn(depth >= 1 && "block")}
+                        >
                           <CalendarDays
                             className="mr-1 inline-block"
                             aria-hidden="true"
                           />
                           <span className="sr-only">Scheduled </span>
                           {timing.scheduled}
-                        </span>
+                        </TaskMetadataButton>
                       )}
                       {depth === 0 && timing.scheduled && timing.due && (
                         <span aria-hidden="true"> · </span>
                       )}
                       {timing.due && (
-                        <span
+                        <TaskMetadataButton
+                          task={task}
+                          kind="deadline"
                           data-overdue={
                             (!task.completed && task.deadline!.date < today) ||
                             undefined
@@ -445,7 +529,7 @@ export function TaskItem({
                           {depth >= 1 && task.deadline
                             ? deadlineLabel(task.deadline, today)
                             : timing.due}
-                        </span>
+                        </TaskMetadataButton>
                       )}
                       {task.recurrence && (
                         <Repeat2
@@ -467,7 +551,17 @@ export function TaskItem({
                           </span>
                         )}
                         {tags.slice(0, 2).map((tag) => (
-                          <TagBadge key={tag.id} tag={tag} compact />
+                          <Link
+                            key={tag.id}
+                            href={workspaceHref({
+                              view: "tags",
+                              selectedId: tag.id,
+                            })}
+                            {...taskInteractionBoundary}
+                            className={cn(metadataClass, "min-w-0 shrink")}
+                          >
+                            <TagBadge tag={tag} compact />
+                          </Link>
                         ))}
                         {tags.length > 2 && (
                           <Button
@@ -532,70 +626,136 @@ export function TaskItem({
           </Item>
         }
       />
-      {!task.archived && (
-        <ContextMenuContent
-          className="w-50 **:data-[slot='context-menu-item']:text-[13px] **:data-[slot='context-menu-item']:leading-4 [&_[data-slot='context-menu-item']>svg]:size-3.5"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <ContextMenuGroup>
-            <ContextMenuLabel>Priority</ContextMenuLabel>
-            <ContextMenuRadioGroup
-              value={task.priority}
-              onValueChange={(value) =>
-                controller.act(
-                  {
-                    type: "occurrence",
-                    task: { ...task, priority: value as Priority },
-                  },
-                  "Priority updated",
-                )
-              }
-              className="flex justify-between gap-1 px-1 py-1"
-            >
-              {[...priorities].reverse().map((priority) => (
-                <ContextMenuRadioItem
-                  key={priority}
-                  value={priority}
-                  aria-label={`${priority[0].toUpperCase()}${priority.slice(1)} priority`}
-                  title={`${priority[0].toUpperCase()}${priority.slice(1)} priority`}
-                  className="data-checked:bg-accent data-checked:text-accent-foreground size-8 justify-center p-0 [&>span]:hidden"
-                >
-                  <Flag
-                    className="text-(--priority-color)"
-                    data-priority={priority}
-                    aria-hidden="true"
-                  />
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuGroup>
-          <ContextMenuSeparator />
-          <ContextMenuGroup>
-            <ContextMenuItem
-              disabled={!canReorder || siblingIndex <= 0}
-              onClick={() => moveSibling(-1)}
-            >
-              <ArrowUp />
-              Move up
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={!canReorder || siblingIndex >= siblings.length - 1}
-              onClick={() => moveSibling(1)}
-            >
-              <ArrowDown />
-              Move down
-            </ContextMenuItem>
-            <ContextMenuItem disabled={!indent} onClick={indent}>
-              <IndentIncrease />
-              Make subtask of previous task
-            </ContextMenuItem>
-            <ContextMenuItem disabled={!outdent} onClick={outdent}>
-              <IndentDecrease />
-              Move out of parent
-            </ContextMenuItem>
-          </ContextMenuGroup>
-        </ContextMenuContent>
-      )}
+      <ContextMenuContent
+        {...taskInteractionBoundary}
+        finalFocus={() =>
+          controller.quickAction
+            ? false
+            : (cardRef.current ??
+              document.querySelector<HTMLElement>(
+                "[data-task-item][tabindex] .task-title",
+              ))
+        }
+        className="w-56 **:data-[slot='context-menu-item']:h-8 **:data-[slot='context-menu-item']:text-[13px] **:data-[slot='context-menu-item']:leading-4 [&_[data-slot='context-menu-item']>svg]:size-3.5"
+      >
+        <ContextMenuGroup>
+          <ContextMenuItem onClick={() => onOpen({ triggerId })}>
+            <Pencil />
+            Open/Edit
+          </ContextMenuItem>
+          <ContextMenuItem onClick={onComplete}>
+            <Check />
+            {task.completed ? "Reopen" : "Complete"}
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem onClick={() => menuAction("schedule")}>
+            <CalendarDays />
+            Schedule
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => menuAction("deadline")}>
+            <CalendarX />
+            Deadline
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => menuAction("priority")}>
+            <Flag />
+            Priority
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => menuAction("tags")}>
+            <Hash />
+            Tags
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem
+            disabled={task.archived}
+            onClick={() => menuAction("location")}
+          >
+            <Folder />
+            Move to{task.context ? " (entire series)" : ""}
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={task.archived}
+            onClick={() => onOpen({ triggerId, focusSubtask: true })}
+          >
+            <Plus />
+            Add subtask{task.context ? " (entire series)" : ""}
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuGroup>
+          <ContextMenuItem
+            disabled={!canReorder || siblingIndex <= 0}
+            onClick={() => moveSibling(-1)}
+          >
+            <ArrowUp />
+            Move up
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={!canReorder || siblingIndex >= siblings.length - 1}
+            onClick={() => moveSibling(1)}
+          >
+            <ArrowDown />
+            Move down
+          </ContextMenuItem>
+          <ContextMenuItem disabled={!indent} onClick={indent}>
+            <IndentIncrease />
+            Make subtask of prev task
+          </ContextMenuItem>
+          <ContextMenuItem disabled={!outdent} onClick={outdent}>
+            <IndentDecrease />
+            Move out of parent
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem
+            onClick={() =>
+              operate(
+                {
+                  kind: "duplicate",
+                  task,
+                  tasks: controller.allTasks,
+                  manual:
+                    (controller.params.get("sort") ?? "manual") === "manual",
+                },
+                "Task duplicated",
+              )
+            }
+          >
+            <Copy />
+            Duplicate
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={task.archived && !ownArchived}
+            onClick={() =>
+              operate(
+                { kind: "archive", task, archived: !ownArchived },
+                ownArchived ? "Task restored" : "Task archived",
+              )
+            }
+          >
+            {ownArchived ? <RotateCcw /> : <Archive />}
+            {task.archived && !ownArchived
+              ? "Archived by parent"
+              : ownArchived
+                ? "Restore"
+                : "Archive"}
+            {task.context ? " (entire series)" : ""}
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => menuAction("delete")}
+          >
+            <Trash2 />
+            Delete...
+          </ContextMenuItem>
+        </ContextMenuGroup>
+      </ContextMenuContent>
     </ContextMenu>
   );
 }

@@ -391,7 +391,9 @@ function SectionColumn({
     <section
       ref={(element) => {
         ref(element);
-        dragRef(element);
+        // The unsectioned container is only a drop target. Registering it as a
+        // disabled draggable marks every child link as aria-disabled too.
+        dragRef(section ? element : null);
       }}
       className={cn(
         "relative",
