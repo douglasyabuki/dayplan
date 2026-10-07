@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import {
   child,
@@ -9,7 +10,7 @@ import {
   ref,
   state,
   task,
-} from "./task-fixtures.mjs";
+} from "./task-fixtures.ts";
 
 test("field patches retain immediate completion and Undo state", () => {
   const before = state([task("a"), child("b", "a")]);
@@ -89,7 +90,7 @@ test("occurrence fields are isolated and clearing dates survives persistence", (
   assert.equal(get(s, "a", "a").title, "Only today");
   assert.equal(get(s, "a", "a", "2026-10-03").title, "a");
 });
-test("child created for one virtual parent does not alter future occurrences", () => {
+test("adding a child to a virtual parent changes the entire template series", () => {
   const s = state([
     task("a", {
       recurrence: daily,
@@ -120,7 +121,7 @@ test("child created for one virtual parent does not alter future occurrences", (
       get(saved, "a", "a", "2026-10-03"),
       d.expandTasks(saved, "2026-10-01", "2026-10-03"),
     ).length,
-    0,
+    1,
   );
 });
 test("series editing shifts dates back to template anchor and preserves exceptions", () => {
@@ -180,7 +181,7 @@ test("removing recurrence materializes saved subtree history", () => {
   assert.deepEqual(s.exceptions, {});
 });
 
-test("one-off placement participates in completion, deletion, and persistence", () => {
+test("template child completion and deletion affect only the selected occurrence", () => {
   let s = state([
     task("a", {
       recurrence: daily,
@@ -203,12 +204,14 @@ test("one-off placement participates in completion, deletion, and persistence", 
     completed: true,
     today: "2026-10-02",
   });
-  assert.ok(get(s, "new").completed);
+  assert.ok(get(s, "new", "a").completed);
+  assert.equal(get(s, "new", "a", "2026-10-03").completed, false);
   const deleted = d.reducer(s, {
     type: "deleteOccurrence",
     ref: ref("a", "a"),
   });
-  assert.equal(get(deleted, "new"), undefined);
+  assert.equal(get(deleted, "new", "a"), undefined);
+  assert.ok(get(deleted, "new", "a", "2026-10-03"));
   assert.ok(get(deleted, "a", "a", "2026-10-03"));
   const values = new Map();
   globalThis.localStorage = {

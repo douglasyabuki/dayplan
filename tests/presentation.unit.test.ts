@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 
-import { domain } from "./task-fixtures.mjs";
+import { test } from "vitest";
+
+import { domain } from "./task-fixtures.ts";
 const { compactTiming, scheduleLabel, deadlineLabel } = domain;
 test("compact timing combines matching dates and preserves distinct deadlines", () => {
   const today = "2026-10-03";

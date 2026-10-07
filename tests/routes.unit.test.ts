@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, test } from "node:test";
 
 import ts from "typescript";
+import { afterAll, test } from "vitest";
 
 const directory = mkdtempSync(join(tmpdir(), "dayplan-routes-"));
 const source = readFileSync(
@@ -27,7 +27,7 @@ const {
   workspaceQueryHref,
   workspaceViews,
 } = createRequire(import.meta.url)(join(directory, "routes.js"));
-after(() => rmSync(directory, { recursive: true, force: true }));
+afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 test("all known views preserve their existing URLs", () => {
   for (const view of workspaceViews) {
@@ -39,7 +39,14 @@ test("all known views preserve their existing URLs", () => {
 
 test("project and tag IDs round-trip as single encoded segments", () => {
   for (const view of ["projects", "tags"]) {
-    for (const selectedId of ["p", "today", "a b", "a/b", "100%", "日本語"]) {
+    for (const selectedId of [
+      "p",
+      "today",
+      "a b",
+      "a/b",
+      "100%",
+      "æ—¥æœ¬èªž",
+    ]) {
       const route = { view, selectedId };
       assert.deepEqual(resolveWorkspaceRoute(workspaceHref(route)), route);
     }

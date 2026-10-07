@@ -6,16 +6,23 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+
+    "test": "npm run test:unit && npm run test:browser && npm run test:e2e",
+    "test:watch": "vitest",
+    "test:unit": "vitest run --project unit",
+    "test:browser": "vitest run --project browser --passWithNoTests",
+    "test:e2e": "playwright test",
+
     "format": "prettier --write \"{app,components,contexts,lib,tests}/**/*.{js,jsx,ts,tsx,css}\"",
     "lint": "eslint",
     "lint:fix": "eslint . --fix",
-    "test": "node --test tests/*.test.mjs",
     "fix": "npm run format && npm run lint:fix"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/react": "^0.5.0",
+    "@playwright/test": "^1.63.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "date-fns": "^4.4.0",
@@ -32,6 +39,9 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/browser-playwright": "^4.1.11",
+    "@vitest/browser-preview": "^4.1.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "eslint-config-prettier": "^10.1.8",
@@ -39,6 +49,10 @@
     "prettier": "^3.9.9",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^7.3.7",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.11",
+    "vitest-browser-react": "^2.3.0"
   }
 }

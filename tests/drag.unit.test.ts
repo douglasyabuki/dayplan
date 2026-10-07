@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 
-import { child, domain as d, get, ref, state, task } from "./task-fixtures.mjs";
+import { test } from "vitest";
+
+import { child, domain as d, get, ref, state, task } from "./task-fixtures.ts";
 
 test("pointer nesting is limited to the title center, excluding controls and trailing whitespace", () => {
   const title = { left: 40, top: 100, width: 500, height: 20 };

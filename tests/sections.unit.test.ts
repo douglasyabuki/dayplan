@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import {
   child,
@@ -9,7 +10,7 @@ import {
   ref,
   state,
   task,
-} from "./task-fixtures.mjs";
+} from "./task-fixtures.ts";
 
 test("location is derived, and moving a root does not rewrite descendants", () => {
   const s = state([task("a"), child("b", "a"), child("c", "b")]);

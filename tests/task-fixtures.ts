@@ -8,9 +8,10 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after } from "node:test";
 
 import ts from "typescript";
+import { afterAll } from "vitest";
+
 const directory = mkdtempSync(join(tmpdir(), "dayplan-hierarchy-"));
 for (const file of readdirSync(new URL("../lib/tasks", import.meta.url)).filter(
   (f) => f.endsWith(".ts"),
@@ -28,7 +29,9 @@ for (const file of readdirSync(new URL("../lib/tasks", import.meta.url)).filter(
     ).outputText,
   );
 }
+
 const require = createRequire(import.meta.url);
+
 export const domain = Object.assign(
   {},
   ...[
@@ -36,13 +39,15 @@ export const domain = Object.assign(
     "recurrence",
     "store",
     "editor",
+    "operations",
     "drag",
     "selectors",
     "presentation",
     "seed",
   ].map((name) => require(join(directory, name + ".js"))),
 );
-after(() => rmSync(directory, { recursive: true, force: true }));
+afterAll(() => rmSync(directory, { recursive: true, force: true }));
+
 export const task = (id, extra = {}) => ({
   id,
   parentId: null,
@@ -58,8 +63,10 @@ export const task = (id, extra = {}) => ({
   createdAt: "2026-10-01",
   ...extra,
 });
+
 export const child = (id, parentId, extra = {}) =>
   task(id, { parentId, projectId: null, sectionId: null, ...extra });
+
 export const state = (tasks = []) => ({
   version: 2,
   tasks,
@@ -76,12 +83,15 @@ export const state = (tasks = []) => ({
   timezone: "UTC",
   theme: "system",
 });
+
 export const daily = { frequency: "daily", weekdays: [] };
+
 export const ref = (taskId, root, date = "2026-10-02") => ({
   taskId,
   ...(root
     ? { context: { recurrenceRootTaskId: root, occurrenceDate: date } }
     : {}),
 });
+
 export const get = (s, taskId, root, date) =>
   domain.resolveOccurrence(s, ref(taskId, root, date));

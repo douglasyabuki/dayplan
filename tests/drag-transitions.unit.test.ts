@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 
-import { child, domain as d, get, ref, state, task } from "./task-fixtures.mjs";
+import { test } from "vitest";
+
+import { child, domain as d, get, ref, state, task } from "./task-fixtures.ts";
 
 const initial = state([
   ...[null, "a", "b"].flatMap((sectionId) => {
