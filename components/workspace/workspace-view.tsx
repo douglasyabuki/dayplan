@@ -2,10 +2,21 @@
 
 import {
   ArrowRight,
+  Calendar,
+  CalendarOff,
+  CalendarX,
+  Flag,
+  Folder,
+  FolderTree,
   LayoutList,
+  ListChecks,
+  ListTodo,
+  type LucideIcon,
   Plus,
   Search,
   SlidersHorizontal,
+  Tag,
+  Tags,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -285,24 +296,45 @@ export function WorkspaceView({
                   label="Project"
                   value={params.get("project") ?? ""}
                   onChange={(v) => setParams({ project: v })}
-                  options={state.projects.map((p) => [p.id, p.name])}
+                  allIcon={FolderTree}
+                  optionIcon={Folder}
+                  colorType="entity"
+                  options={state.projects.map((p): [string, string, string] => [
+                    p.id,
+                    p.name,
+                    p.color,
+                  ])}
                 />
                 <FilterSelect
                   label="Tag"
                   value={params.get("tag") ?? ""}
                   onChange={(v) => setParams({ tag: v })}
-                  options={state.tags.map((t) => [t.id, t.name])}
+                  allIcon={Tags}
+                  optionIcon={Tag}
+                  colorType="entity"
+                  options={state.tags.map((t): [string, string, string] => [
+                    t.id,
+                    t.name,
+                    t.color,
+                  ])}
                 />
                 <FilterSelect
                   label="Priority"
                   value={params.get("priority") ?? ""}
                   onChange={(v) => setParams({ priority: v })}
-                  options={priorities.map((p) => [p, p])}
+                  optionIcon={Flag}
+                  colorType="priority"
+                  options={priorities.map((p): [string, string, string] => [
+                    p,
+                    p,
+                    p,
+                  ])}
                 />
                 <FilterSelect
                   label="Schedule"
                   value={params.get("scheduled") ?? ""}
                   onChange={(v) => setParams({ scheduled: v })}
+                  optionIcons={{ yes: Calendar, no: CalendarOff }}
                   options={[
                     ["yes", "Scheduled"],
                     ["no", "Unscheduled"],
@@ -333,30 +365,47 @@ export function WorkspaceView({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="all">
+                          <ListTodo className="size-4 shrink-0" />
+                          All statuses
+                        </SelectItem>
+                        <SelectItem value="open">
+                          <LayoutList className="size-4 shrink-0" />
+                          Open
+                        </SelectItem>
+                        <SelectItem value="completed">
+                          <ListChecks className="size-4 shrink-0" />
+                          Completed
+                        </SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="filter-from">Due from</FieldLabel>
-                  <Input
-                    id="filter-from"
-                    type="date"
-                    value={params.get("from") ?? ""}
-                    onChange={(e) => setParams({ from: e.target.value })}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="filter-from"
+                      type="date"
+                      className="pr-9 [&::-webkit-calendar-picker-indicator]:opacity-0"
+                      value={params.get("from") ?? ""}
+                      onChange={(e) => setParams({ from: e.target.value })}
+                    />
+                    <CalendarX className="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2" />
+                  </div>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="filter-to">Due before</FieldLabel>
-                  <Input
-                    id="filter-to"
-                    type="date"
-                    value={params.get("to") ?? ""}
-                    onChange={(e) => setParams({ to: e.target.value })}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="filter-to"
+                      type="date"
+                      className="pr-9 [&::-webkit-calendar-picker-indicator]:opacity-0"
+                      value={params.get("to") ?? ""}
+                      onChange={(e) => setParams({ to: e.target.value })}
+                    />
+                    <CalendarX className="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2" />
+                  </div>
                 </Field>
                 <div className="flex items-end">
                   <Button
@@ -447,15 +496,23 @@ function FilterSelect({
   value,
   onChange,
   options,
+  allIcon: AllIcon,
+  optionIcon: OptionIcon,
+  optionIcons,
+  colorType,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: string[][];
+  options: [string, string, string?][];
+  allIcon?: LucideIcon;
+  optionIcon?: LucideIcon;
+  optionIcons?: Record<string, LucideIcon>;
+  colorType?: "entity" | "priority";
 }) {
   const items = [
-    { value: "", label: "All" },
-    ...options.map(([value, label]) => ({ value, label })),
+    { value: "", label: "All", color: undefined },
+    ...options.map(([value, label, color]) => ({ value, label, color })),
   ];
   return (
     <Field>
@@ -472,11 +529,32 @@ function FilterSelect({
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            {items.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
+            {items.map((item) => {
+              const Icon =
+                item.value === ""
+                  ? AllIcon
+                  : (optionIcons?.[item.value] ?? OptionIcon);
+              return (
+                <SelectItem key={item.value} value={item.value}>
+                  {Icon && (
+                    <Icon
+                      className={cn(
+                        "size-4 shrink-0",
+                        colorType === "entity" && "text-(--entity-color)",
+                        colorType === "priority" && "text-(--priority-color)",
+                      )}
+                      data-color={
+                        colorType === "entity" ? item.color : undefined
+                      }
+                      data-priority={
+                        colorType === "priority" ? item.color : undefined
+                      }
+                    />
+                  )}
+                  {item.label}
+                </SelectItem>
+              );
+            })}
           </SelectGroup>
         </SelectContent>
       </Select>
