@@ -29,6 +29,11 @@ import {
 } from "@/components/tasks/task-sections";
 import { Button } from "@/components/ui/button";
 import { Calendar as DatePicker } from "@/components/ui/calendar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -183,122 +188,129 @@ export function WorkspaceView({
               />
             </div>
           )}
-          <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b pb-2 text-xs">
-            <div className="flex items-center gap-2">
-              <LayoutList className="text-muted-foreground size-4" />
-              <span>
-                {view === "calendar"
-                  ? "Your schedule"
-                  : `${visible.length} tasks`}
-              </span>
-              {view === "upcoming" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    setParams({
-                      range: String(Math.min(range + 30, 365)),
-                    })
-                  }
-                  disabled={range >= 365}
-                >
-                  Next {range} days <Plus data-icon="inline-end" />
-                </Button>
-              )}
-            </div>
-            {layout === "board" && quickAddForm}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant={
-                  filtersOpen || activeFilters.length ? "secondary" : "ghost"
-                }
-                size="sm"
-                onClick={() => setFiltersOpen(!filtersOpen)}
-              >
-                <SlidersHorizontal data-icon="inline-start" />
-                Filter
-                {activeFilters.length > 0 && ` (${activeFilters.length})`}
-              </Button>
-              {view !== "calendar" && (
-                <>
-                  <Select
-                    value={params.get("sort") ?? "manual"}
-                    onValueChange={(value) => {
-                      if (value !== null) setParams({ sort: value });
-                    }}
+          <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b pb-2 text-xs">
+              <div className="flex items-center gap-2">
+                <LayoutList className="text-muted-foreground size-4" />
+                <span>
+                  {view === "calendar"
+                    ? "Your schedule"
+                    : `${visible.length} tasks`}
+                </span>
+                {view === "upcoming" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setParams({
+                        range: String(Math.min(range + 30, 365)),
+                      })
+                    }
+                    disabled={range >= 365}
                   >
-                    <SelectTrigger
-                      aria-label="Sort tasks"
-                      className="text-muted-foreground hover:bg-muted h-7 w-auto max-w-36 border-transparent text-xs"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="manual">Manual order</SelectItem>
-                        <SelectItem value="deadline">Due date</SelectItem>
-                        <SelectItem value="schedule">Scheduled date</SelectItem>
-                        <SelectItem value="priority">Priority</SelectItem>
-                        <SelectItem value="title">Title</SelectItem>
-                        <SelectItem value="created">Newest first</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  {(!sectioned || layout !== "board") && (
-                    <Select
-                      value={
-                        params.get("group") ??
-                        (sectioned
-                          ? "sections"
-                          : view === "today"
-                            ? "today"
-                            : view === "upcoming"
-                              ? "upcoming"
-                              : "none")
+                    Next {range} days <Plus data-icon="inline-end" />
+                  </Button>
+                )}
+              </div>
+              {layout === "board" && quickAddForm}
+              <div className="flex flex-wrap items-center gap-2">
+                <CollapsibleTrigger
+                  render={
+                    <Button
+                      variant={
+                        filtersOpen || activeFilters.length
+                          ? "secondary"
+                          : "ghost"
                       }
+                      size="sm"
+                    />
+                  }
+                >
+                  <SlidersHorizontal data-icon="inline-start" />
+                  Filter
+                  {activeFilters.length > 0 && ` (${activeFilters.length})`}
+                </CollapsibleTrigger>
+                {view !== "calendar" && (
+                  <>
+                    <Select
+                      value={params.get("sort") ?? "manual"}
                       onValueChange={(value) => {
-                        if (value !== null) setParams({ group: value });
+                        if (value !== null) setParams({ sort: value });
                       }}
                     >
                       <SelectTrigger
-                        aria-label="Group tasks"
+                        aria-label="Sort tasks"
                         className="text-muted-foreground hover:bg-muted h-7 w-auto max-w-36 border-transparent text-xs"
                       >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          {sectioned && (
-                            <SelectItem value="sections">Sections</SelectItem>
-                          )}
-                          {view === "today" && (
-                            <SelectItem value="today">
-                              Today sections
-                            </SelectItem>
-                          )}
-                          {view === "upcoming" && (
-                            <SelectItem value="upcoming">
-                              Upcoming dates
-                            </SelectItem>
-                          )}
-                          <SelectItem value="none">No grouping</SelectItem>
+                          <SelectItem value="manual">Manual order</SelectItem>
+                          <SelectItem value="deadline">Due date</SelectItem>
                           <SelectItem value="schedule">
                             Scheduled date
                           </SelectItem>
-                          <SelectItem value="deadline">Due date</SelectItem>
-                          <SelectItem value="project">Project</SelectItem>
                           <SelectItem value="priority">Priority</SelectItem>
-                          <SelectItem value="status">Status</SelectItem>
+                          <SelectItem value="title">Title</SelectItem>
+                          <SelectItem value="created">Newest first</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                  )}
-                </>
-              )}
+                    {(!sectioned || layout !== "board") && (
+                      <Select
+                        value={
+                          params.get("group") ??
+                          (sectioned
+                            ? "sections"
+                            : view === "today"
+                              ? "today"
+                              : view === "upcoming"
+                                ? "upcoming"
+                                : "none")
+                        }
+                        onValueChange={(value) => {
+                          if (value !== null) setParams({ group: value });
+                        }}
+                      >
+                        <SelectTrigger
+                          aria-label="Group tasks"
+                          className="text-muted-foreground hover:bg-muted h-7 w-auto max-w-36 border-transparent text-xs"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {sectioned && (
+                              <SelectItem value="sections">Sections</SelectItem>
+                            )}
+                            {view === "today" && (
+                              <SelectItem value="today">
+                                Today sections
+                              </SelectItem>
+                            )}
+                            {view === "upcoming" && (
+                              <SelectItem value="upcoming">
+                                Upcoming dates
+                              </SelectItem>
+                            )}
+                            <SelectItem value="none">No grouping</SelectItem>
+                            <SelectItem value="schedule">
+                              Scheduled date
+                            </SelectItem>
+                            <SelectItem value="deadline">Due date</SelectItem>
+                            <SelectItem value="project">Project</SelectItem>
+                            <SelectItem value="priority">Priority</SelectItem>
+                            <SelectItem value="status">Status</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-          {filtersOpen && (
-            <div className="bg-muted/30 mb-3 max-h-[25dvh] shrink-0 overflow-y-auto rounded-xl border p-4">
+            <CollapsibleContent className="bg-muted/30 mb-3 max-h-[25dvh] shrink-0 overflow-y-auto rounded-xl border p-4">
               <FieldGroup className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <FilterSelect
                   label="Project"
@@ -414,8 +426,8 @@ export function WorkspaceView({
                   </Button>
                 </div>
               </FieldGroup>
-            </div>
-          )}
+            </CollapsibleContent>
+          </Collapsible>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <div
               className={cn(
