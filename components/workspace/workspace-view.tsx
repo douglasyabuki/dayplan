@@ -3,8 +3,8 @@
 import {
   ArrowRight,
   Calendar,
+  CalendarDays,
   CalendarOff,
-  CalendarX,
   Flag,
   Folder,
   FolderTree,
@@ -18,7 +18,7 @@ import {
   Tag,
   Tags,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import { TaskCalendarView } from "@/components/tasks/task-calendar";
 import { SectionRemovalDropZone } from "@/components/tasks/task-drag-feedback";
@@ -28,8 +28,15 @@ import {
   ListSectionGroups,
 } from "@/components/tasks/task-sections";
 import { Button } from "@/components/ui/button";
+import { Calendar as DatePicker } from "@/components/ui/calendar";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -39,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
+import { dateKey, parseDay } from "@/lib/tasks/dates";
 import type { WorkspaceRoute } from "@/lib/tasks/routes";
 import { priorities } from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
@@ -381,32 +389,18 @@ export function WorkspaceView({
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field>
-                  <FieldLabel htmlFor="filter-from">Due from</FieldLabel>
-                  <div className="relative">
-                    <Input
-                      id="filter-from"
-                      type="date"
-                      className="pr-9 [&::-webkit-calendar-picker-indicator]:opacity-0"
-                      value={params.get("from") ?? ""}
-                      onChange={(e) => setParams({ from: e.target.value })}
-                    />
-                    <CalendarX className="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2" />
-                  </div>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="filter-to">Due before</FieldLabel>
-                  <div className="relative">
-                    <Input
-                      id="filter-to"
-                      type="date"
-                      className="pr-9 [&::-webkit-calendar-picker-indicator]:opacity-0"
-                      value={params.get("to") ?? ""}
-                      onChange={(e) => setParams({ to: e.target.value })}
-                    />
-                    <CalendarX className="text-muted-foreground pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2" />
-                  </div>
-                </Field>
+                <DateFilterField
+                  id="filter-from"
+                  label="Due from"
+                  value={params.get("from") ?? ""}
+                  onChange={(value) => setParams({ from: value })}
+                />
+                <DateFilterField
+                  id="filter-to"
+                  label="Due before"
+                  value={params.get("to") ?? ""}
+                  onChange={(value) => setParams({ to: value })}
+                />
                 <div className="flex items-end">
                   <Button
                     variant="ghost"
@@ -491,6 +485,79 @@ export function WorkspaceView({
     </div>
   );
 }
+function DateFilterField({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = value ? parseDay(value) : undefined;
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <div className="relative">
+        <Input
+          id={id}
+          type="date"
+          className="pr-16 [&::-webkit-calendar-picker-indicator]:opacity-0"
+          value={value}
+          onChange={(event) => onChange(event.target.value || null)}
+        />
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="absolute top-1/2 right-1 -translate-y-1/2"
+              />
+            }
+            aria-label={`Choose ${label.toLowerCase()} date`}
+            title={`Choose ${label.toLowerCase()} date`}
+          >
+            <CalendarDays />
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-auto gap-0 p-2">
+            <PopoverTitle className="sr-only">
+              Choose {label.toLowerCase()} date
+            </PopoverTitle>
+            <DatePicker
+              mode="single"
+              selected={selectedDate}
+              defaultMonth={selectedDate}
+              onSelect={(date) => {
+                onChange(date ? dateKey(date) : null);
+                setOpen(false);
+              }}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-1 w-full justify-center"
+              disabled={!value}
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
+            >
+              Clear date
+            </Button>
+          </PopoverContent>
+        </Popover>
+      </div>
+    </Field>
+  );
+}
+
 function FilterSelect({
   label,
   value,
