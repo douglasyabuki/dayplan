@@ -128,6 +128,64 @@ test("section deletion moves root tasks while preserving child inheritance", () 
     0,
   );
 });
+test("sections can be inserted beside a sibling and keep their order", () => {
+  const s = state();
+  const inserted = d.reducer(
+    d.reducer(s, {
+      type: "section",
+      section: { id: "left", name: "Left", projectId: "p", order: 2 },
+    }),
+    { type: "reorderSections", projectId: "p", ids: ["a", "left", "b"] },
+  );
+  assert.deepEqual(
+    inserted.sections
+      .filter((section) => section.projectId === "p")
+      .sort((a, b) => a.order - b.order)
+      .map((section) => section.id),
+    ["a", "left", "b"],
+  );
+});
+test("moving a section moves its tasks and appends it in the destination", () => {
+  const s = state([task("root"), child("child", "root")]);
+  s.projects.push({ id: "q", name: "Another project", color: "rose" });
+  s.sections.push({
+    id: "existing",
+    name: "Existing",
+    projectId: "q",
+    order: 0,
+  });
+  const moved = d.reducer(s, {
+    type: "moveSection",
+    id: "a",
+    projectId: "q",
+  });
+  assert.equal(
+    moved.sections.find((section) => section.id === "a")?.projectId,
+    "q",
+  );
+  assert.equal(moved.sections.find((section) => section.id === "a")?.order, 1);
+  assert.equal(get(moved, "root").projectId, "q");
+  assert.equal(get(moved, "root").sectionId, "a");
+  assert.equal(
+    moved.tasks.find((task) => task.id === "child")?.projectId,
+    null,
+  );
+  assert.equal(
+    moved.tasks.find((task) => task.id === "child")?.sectionId,
+    null,
+  );
+  const movedToInbox = d.reducer(moved, {
+    type: "moveSection",
+    id: "a",
+    projectId: null,
+  });
+  assert.equal(
+    movedToInbox.sections.find((section) => section.id === "a")?.projectId,
+    null,
+  );
+  assert.equal(get(movedToInbox, "root").projectId, null);
+  assert.equal(get(movedToInbox, "root").sectionId, "a");
+});
 test("seed contains valid full children and independent recurrence boundaries", () => {
   const s = d.seedWorkspace();
   d.validateHierarchy(s.tasks);

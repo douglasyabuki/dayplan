@@ -3,7 +3,17 @@
 import { SortableKeyboardPlugin } from "@dnd-kit/dom/sortable";
 import { useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
-import { GripVertical, MoreHorizontal, Plus } from "lucide-react";
+import {
+  BetweenHorizontalEnd,
+  BetweenHorizontalStart,
+  Folder,
+  GripVertical,
+  Inbox,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -22,6 +32,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  ContextMenu,
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -29,6 +51,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Field,
   FieldGroup,
@@ -58,15 +92,19 @@ import { TaskListPreview } from "./task-drag-feedback";
 export function SectionDialog({
   projectId,
   section,
+  mode,
+  placement,
   close,
 }: {
   projectId: string | null;
   section?: Section;
+  mode?: "rename" | "delete";
+  placement?: { relativeTo: string; side: "left" | "right" };
   close: () => void;
 }) {
   const { state, act } = useWorkspace();
   const [name, setName] = useState(section?.name ?? "");
-  const [deleting, setDeleting] = useState(false);
+  const [deleting, setDeleting] = useState(mode === "delete");
   const [deleteTasks, setDeleteTasks] = useState(false);
   const [destination, setDestination] = useState("");
   const sections = state.sections
@@ -85,7 +123,9 @@ export function SectionDialog({
             {deleting
               ? `Delete ${section?.name}?`
               : section
-                ? "Manage section"
+                ? mode === "rename"
+                  ? "Rename section"
+                  : "Manage section"
                 : "Add section"}
           </DialogTitle>
           <DialogDescription>
@@ -109,20 +149,40 @@ export function SectionDialog({
               );
             } else {
               if (!name.trim()) return;
-              act(
-                {
-                  type: "section",
-                  section: {
-                    id: section?.id ?? crypto.randomUUID(),
-                    name: name.trim(),
-                    projectId,
-                    order:
-                      section?.order ??
-                      Math.max(-1, ...sections.map((s) => s.order)) + 1,
+              const id = section?.id ?? crypto.randomUUID();
+              const updated: Section = {
+                id,
+                name: name.trim(),
+                projectId,
+                order:
+                  section?.order ??
+                  Math.max(-1, ...sections.map((s) => s.order)) + 1,
+              };
+              if (placement) {
+                const ids = sections.map((item) => item.id);
+                const relativeIndex = ids.indexOf(placement.relativeTo);
+                if (relativeIndex < 0) return;
+                ids.splice(
+                  relativeIndex + (placement.side === "right" ? 1 : 0),
+                  0,
+                  id,
+                );
+                act(
+                  {
+                    type: "batch",
+                    actions: [
+                      { type: "section", section: updated },
+                      { type: "reorderSections", projectId, ids },
+                    ],
                   },
-                },
-                section ? "Section renamed" : "Section added",
-              );
+                  "Section added",
+                );
+              } else {
+                act(
+                  { type: "section", section: updated },
+                  section ? "Section renamed" : "Section added",
+                );
+              }
             }
             close();
           }}
@@ -202,7 +262,7 @@ export function SectionDialog({
             )}
           </FieldGroup>
           <DialogFooter className="mt-6">
-            {section && !deleting && (
+            {section && !deleting && mode !== "rename" && (
               <Button
                 type="button"
                 variant="destructive"
@@ -228,6 +288,212 @@ export function SectionDialog({
   );
 }
 
+const sectionMenuClass =
+  "w-56 **:data-[slot='dropdown-menu-item']:h-8 **:data-[slot='dropdown-menu-item']:text-[13px] **:data-[slot='dropdown-menu-item']:leading-4 **:data-[slot='dropdown-menu-checkbox-item']:h-8 **:data-[slot='dropdown-menu-checkbox-item']:text-[13px] **:data-[slot='dropdown-menu-checkbox-item']:leading-4 **:data-[slot='dropdown-menu-sub-trigger']:h-8 **:data-[slot='dropdown-menu-sub-trigger']:text-[13px] **:data-[slot='dropdown-menu-sub-trigger']:leading-4 [&_[data-slot='dropdown-menu-item']>svg]:size-3.5 [&_[data-slot='dropdown-menu-checkbox-item']>svg]:size-3.5 [&_[data-slot='dropdown-menu-sub-trigger']>svg]:size-3.5";
+const sectionContextMenuClass =
+  "w-56 **:data-[slot='context-menu-item']:h-8 **:data-[slot='context-menu-item']:text-[13px] **:data-[slot='context-menu-item']:leading-4 **:data-[slot='context-menu-checkbox-item']:h-8 **:data-[slot='context-menu-checkbox-item']:text-[13px] **:data-[slot='context-menu-checkbox-item']:leading-4 **:data-[slot='context-menu-sub-trigger']:h-8 **:data-[slot='context-menu-sub-trigger']:text-[13px] **:data-[slot='context-menu-sub-trigger']:leading-4 [&_[data-slot='context-menu-item']>svg]:size-3.5 [&_[data-slot='context-menu-checkbox-item']>svg]:size-3.5 [&_[data-slot='context-menu-sub-trigger']>svg]:size-3.5";
+
+function useSectionMenuActions(section: Section) {
+  const { state, act } = useWorkspace();
+  const { setSectionDialog } = useWorkspaceController();
+  const destinations = [
+    { id: null, name: "Inbox", Icon: Inbox, color: null },
+    ...state.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      Icon: Folder,
+      color: project.color,
+    })),
+  ];
+  const moveTo = (projectId: string | null) =>
+    act({ type: "moveSection", id: section.id, projectId }, "Section moved");
+  const actions = [
+    {
+      label: "Rename",
+      Icon: Pencil,
+      onSelect: () => setSectionDialog({ section, mode: "rename" }),
+    },
+    {
+      label: "Add Section to Left",
+      Icon: BetweenHorizontalEnd,
+      onSelect: () =>
+        setSectionDialog({
+          placement: { relativeTo: section.id, side: "left" },
+        }),
+    },
+    {
+      label: "Add Section to Right",
+      Icon: BetweenHorizontalStart,
+      onSelect: () =>
+        setSectionDialog({
+          placement: { relativeTo: section.id, side: "right" },
+        }),
+    },
+  ];
+  const deleteSection = () => setSectionDialog({ section, mode: "delete" });
+  return { actions, deleteSection, destinations, moveTo };
+}
+
+function SectionActions({ section }: { section: Section }) {
+  const { actions, deleteSection, destinations, moveTo } =
+    useSectionMenuActions(section);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Manage ${section.name}`}
+          />
+        }
+      >
+        <MoreHorizontal />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="right"
+        align="start"
+        className={sectionMenuClass}
+      >
+        <DropdownMenuGroup>
+          {actions.map(({ label, Icon, onSelect }) => (
+            <DropdownMenuItem key={label} onClick={onSelect}>
+              <Icon />
+              {label}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Folder />
+              Move to
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className={sectionMenuClass}>
+              <DropdownMenuGroup>
+                {destinations.map((destination) => (
+                  <DropdownMenuCheckboxItem
+                    key={destination.id ?? "inbox"}
+                    checked={destination.id === section.projectId}
+                    disabled={destination.id === section.projectId}
+                    onCheckedChange={(checked) => {
+                      if (checked) moveTo(destination.id);
+                    }}
+                  >
+                    <destination.Icon
+                      className={
+                        destination.color
+                          ? "text-(--entity-color)"
+                          : "text-muted-foreground"
+                      }
+                      data-color={destination.color ?? undefined}
+                    />
+                    {destination.name}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem variant="destructive" onClick={deleteSection}>
+            <Trash2 />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SectionHeaderMenu({
+  section,
+  children,
+}: {
+  section: Section;
+  children: React.ReactNode;
+}) {
+  const { actions, deleteSection, destinations, moveTo } =
+    useSectionMenuActions(section);
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger
+        render={
+          <div
+            tabIndex={0}
+            data-section-header-menu
+            className="flex min-w-0 flex-1 items-center gap-1.25"
+            onKeyDown={(event) => {
+              if (
+                event.key !== "ContextMenu" &&
+                !(event.shiftKey && event.key === "F10")
+              )
+                return;
+              event.preventDefault();
+              const rect = event.currentTarget.getBoundingClientRect();
+              event.currentTarget.dispatchEvent(
+                new MouseEvent("contextmenu", {
+                  bubbles: true,
+                  clientX: rect.left + 16,
+                  clientY: rect.top + 16,
+                }),
+              );
+            }}
+          />
+        }
+      >
+        {children}
+      </ContextMenuTrigger>
+      <ContextMenuContent className={sectionContextMenuClass}>
+        <ContextMenuGroup>
+          {actions.map(({ label, Icon, onSelect }) => (
+            <ContextMenuItem key={label} onClick={onSelect}>
+              <Icon />
+              {label}
+            </ContextMenuItem>
+          ))}
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Folder />
+              Move to
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className={sectionContextMenuClass}>
+              <ContextMenuGroup>
+                {destinations.map((destination) => (
+                  <ContextMenuCheckboxItem
+                    key={destination.id ?? "inbox"}
+                    checked={destination.id === section.projectId}
+                    disabled={destination.id === section.projectId}
+                    onCheckedChange={(checked) => {
+                      if (checked) moveTo(destination.id);
+                    }}
+                  >
+                    <destination.Icon
+                      className={
+                        destination.color
+                          ? "text-(--entity-color)"
+                          : "text-muted-foreground"
+                      }
+                      data-color={destination.color ?? undefined}
+                    />
+                    {destination.name}
+                  </ContextMenuCheckboxItem>
+                ))}
+              </ContextMenuGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem variant="destructive" onClick={deleteSection}>
+            <Trash2 />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuGroup>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
 type SectionGroupsProps = {
   projectId: string | null;
   tasks: Occurrence[];
@@ -236,10 +502,10 @@ type SectionGroupsProps = {
   manual: boolean;
   open: OpenTask;
   create: (sectionId: string | null) => void;
-  manage: (section?: Section) => void;
 };
 function SectionGroups(props: SectionGroupsProps) {
-  const { displayedSections, dragDestination } = useWorkspaceController();
+  const { displayedSections, dragDestination, setSectionDialog } =
+    useWorkspaceController();
   const sections = previewOrder(
     displayedSections
       .filter((s) => s.projectId === props.projectId)
@@ -269,7 +535,7 @@ function SectionGroups(props: SectionGroupsProps) {
         <Button
           variant="outline"
           className="shrink-0 self-start"
-          onClick={() => props.manage()}
+          onClick={() => setSectionDialog({})}
         >
           <Plus data-icon="inline-start" />
           Add section
@@ -422,18 +688,19 @@ function SectionColumn({
           )}
         >
           <CardHeader className="flex h-[calc(var(--section-header-height)+0.75rem)] shrink-0 flex-row items-center gap-1.25 px-3 pt-3 pb-3">
-            {sectionHeader}
-            <Badge variant="secondary">{tasks.length}</Badge>
             {section && (
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Manage ${section.name}`}
-                onClick={() => props.manage(section)}
-              >
-                <MoreHorizontal />
-              </Button>
+              <SectionHeaderMenu section={section}>
+                {sectionHeader}
+                <Badge variant="secondary">{tasks.length}</Badge>
+              </SectionHeaderMenu>
             )}
+            {isUnsectioned && (
+              <>
+                {sectionHeader}
+                <Badge variant="secondary">{tasks.length}</Badge>
+              </>
+            )}
+            {section && <SectionActions section={section} />}
           </CardHeader>
           <CardContent
             className={cn(
@@ -469,18 +736,19 @@ function SectionColumn({
               !isUnsectioned && "max-w-full",
             )}
           >
-            {sectionHeader}
-            <Badge variant="secondary">{tasks.length}</Badge>
             {section && (
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Manage ${section.name}`}
-                onClick={() => props.manage(section)}
-              >
-                <MoreHorizontal />
-              </Button>
+              <SectionHeaderMenu section={section}>
+                {sectionHeader}
+                <Badge variant="secondary">{tasks.length}</Badge>
+              </SectionHeaderMenu>
             )}
+            {isUnsectioned && (
+              <>
+                {sectionHeader}
+                <Badge variant="secondary">{tasks.length}</Badge>
+              </>
+            )}
+            {section && <SectionActions section={section} />}
           </div>
           <div
             className={cn(

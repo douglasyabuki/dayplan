@@ -81,6 +81,8 @@ export function WorkspaceOverlays() {
         <SectionDialog
           projectId={projectId}
           section={sectionDialog.section}
+          mode={sectionDialog.mode}
+          placement={sectionDialog.placement}
           close={() => setSectionDialog(null)}
         />
       )}

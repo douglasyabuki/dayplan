@@ -51,7 +51,6 @@ export function WorkspaceView({
     filtersOpen,
     setFiltersOpen,
     setEntity,
-    setSectionDialog,
     sectioned,
     projectId,
     layout,
@@ -403,7 +402,6 @@ export function WorkspaceView({
                         manual={(params.get("sort") ?? "manual") === "manual"}
                         open={open}
                         create={(id) => create(undefined, undefined, id)}
-                        manage={(section) => setSectionDialog({ section })}
                       />
                     ) : (
                       <ListSectionGroups
@@ -413,7 +411,6 @@ export function WorkspaceView({
                         manual={(params.get("sort") ?? "manual") === "manual"}
                         open={open}
                         create={(id) => create(undefined, undefined, id)}
-                        manage={(section) => setSectionDialog({ section })}
                       />
                     )
                   ) : layout === "board" ? (

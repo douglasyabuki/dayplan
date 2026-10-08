@@ -46,6 +46,7 @@ export type Action =
   | { type: "reorder"; ids: string[] }
   | { type: "theme"; theme: Workspace["theme"] }
   | { type: "section"; section: Section }
+  | { type: "moveSection"; id: string; projectId: string | null }
   | {
       type: "deleteSection";
       id: string;
@@ -474,6 +475,58 @@ export function reducer(state: Workspace, action: Action): Workspace {
           ? state.sections.map((s) => (s.id === section.id ? section : s))
           : [...state.sections, section],
       };
+    }
+    case "moveSection": {
+      const section = state.sections.find((s) => s.id === action.id);
+      if (
+        !section ||
+        section.projectId === action.projectId ||
+        (action.projectId &&
+          !state.projects.some((p) => p.id === action.projectId))
+      )
+        return state;
+      const order =
+        Math.max(
+          -1,
+          ...state.sections
+            .filter((s) => s.projectId === action.projectId)
+            .map((s) => s.order),
+        ) + 1;
+      const next: Workspace = {
+        ...state,
+        sections: state.sections.map((s) =>
+          s.id === action.id ? { ...s, projectId: action.projectId, order } : s,
+        ),
+      };
+      const roots = state.tasks.filter(
+        (task) => !task.parentId && task.sectionId === action.id,
+      );
+      let moved = roots.reduce(
+        (workspace, task) =>
+          patchReference(
+            workspace,
+            { taskId: task.id },
+            {
+              projectId: action.projectId,
+              sectionId: action.id,
+            },
+          ),
+        next,
+      );
+      const rootIds = new Set(roots.map((task) => task.id));
+      moved = {
+        ...moved,
+        exceptions: Object.fromEntries(
+          Object.entries(moved.exceptions).map(([key, exception]) => {
+            if (!rootIds.has(exception.taskId)) return [key, exception];
+            const overrides = { ...exception.overrides };
+            if ("projectId" in overrides)
+              overrides.projectId = action.projectId;
+            return [key, { ...exception, overrides }];
+          }),
+        ),
+      };
+      return moved;
     }
     case "deleteSection": {
       const section = state.sections.find((s) => s.id === action.id);

@@ -135,6 +135,8 @@ function useControllerState() {
   } | null>(null);
   const [sectionDialog, setSectionDialog] = useState<{
     section?: Section;
+    mode?: "rename" | "delete";
+    placement?: { relativeTo: string; side: "left" | "right" };
   } | null>(null);
   const sectioned = view === "inbox" || (view === "projects" && !!selectedId);
   const hasLayout = sectioned || ["today", "upcoming", "tasks"].includes(view);
