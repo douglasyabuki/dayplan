@@ -1,4 +1,4 @@
-import { Hash } from "lucide-react";
+import { Tag as TagIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import type { Tag } from "@/lib/tasks/types";
@@ -22,7 +22,7 @@ export function TagBadge({
       )}
       title={tag.name}
     >
-      <Hash
+      <TagIcon
         data-icon="inline-start"
         className="tag-icon shrink-0 text-(--entity-color) opacity-75"
         data-color={tag.color}

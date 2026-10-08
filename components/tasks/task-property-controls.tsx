@@ -5,9 +5,9 @@ import {
   CalendarX,
   Flag,
   Folder,
-  Hash,
   Inbox,
   Repeat2,
+  Tag,
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
@@ -499,7 +499,7 @@ export function TaskTagsPicker({
                   !selected && "text-muted-foreground",
                 )}
               >
-                <Hash
+                <Tag
                   data-icon="inline-start"
                   className={
                     selected

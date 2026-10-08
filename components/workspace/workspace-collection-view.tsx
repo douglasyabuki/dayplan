@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, FolderOpen, Hash, Plus } from "lucide-react";
+import { ArrowRight, FolderOpen, Plus, Tag } from "lucide-react";
 import Link from "next/link";
 
 import { useWorkspaceController } from "@/contexts/workspace-controller";
@@ -20,7 +20,7 @@ export function WorkspaceCollectionView({ kind }: { kind: CollectionKind }) {
             className="flex size-9 items-center justify-center rounded-lg text-(--entity-color) [background:color-mix(in_oklch,var(--entity-color)_10%,transparent)] [&_svg]:size-4"
             data-color={item.color}
           >
-            {kind === "projects" ? <FolderOpen /> : <Hash />}
+            {kind === "projects" ? <FolderOpen /> : <Tag />}
           </span>
           <h2>{item.name}</h2>
           <p>

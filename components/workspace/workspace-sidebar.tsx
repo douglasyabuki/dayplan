@@ -6,13 +6,13 @@ import {
   CalendarDays,
   CheckCheck,
   Folder,
-  Hash,
   Inbox,
   Layers3,
   MoreHorizontal,
   Plus,
   Sun,
   Sunrise,
+  Tag,
 } from "lucide-react";
 import Link from "next/link";
 import { useId } from "react";
@@ -259,7 +259,7 @@ export function WorkspaceSidebar({
                           isActive={view === "tags" && selectedId === tag.id}
                           className="min-h-9 rounded-lg px-3 pr-9 text-[13px]"
                         >
-                          <Hash
+                          <Tag
                             className="tag-icon text-(--entity-color) opacity-75"
                             data-color={tag.color}
                           />

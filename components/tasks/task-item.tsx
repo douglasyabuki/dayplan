@@ -16,13 +16,13 @@ import {
   Copy,
   Flag,
   Folder,
-  Hash,
   IndentDecrease,
   IndentIncrease,
   Pencil,
   Plus,
   Repeat2,
   RotateCcw,
+  Tag,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -687,7 +687,7 @@ export function TaskItem({
             Priority
           </ContextMenuItem>
           <ContextMenuItem onClick={() => menuAction("tags")}>
-            <Hash />
+            <Tag />
             Tags
           </ContextMenuItem>
         </ContextMenuGroup>
