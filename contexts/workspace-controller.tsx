@@ -26,6 +26,7 @@ import {
   dragDestination as resolveDragDestination,
   taskPointerIntent,
 } from "@/lib/tasks/drag";
+import { taskDropAction } from "@/lib/tasks/operations";
 import {
   asOccurrence,
   expandTasks,
@@ -287,6 +288,12 @@ function useControllerState() {
     useState<DragDestination | null>(null);
   const [dragSnapshot, setDragSnapshot] = useState<HTMLElement | null>(null);
   const [dragSource, setDragSource] = useState<Occurrence | null>(null);
+  const [statusCollapsed, setStatusCollapsed] = useState<
+    Record<string, boolean>
+  >({});
+  const statusGrouping =
+    showSections && (params.get("status") ?? "open") === "all";
+  const [taskExpanded, setTaskExpanded] = useState<Record<string, boolean>>({});
 
   const dragDraft = useRef<{
     sourceId: string | null;
@@ -478,16 +485,12 @@ function useControllerState() {
     if (!task) return;
     if (destination?.kind === "task") {
       act(
-        {
-          type: "moveTask",
-          task,
-          parentRef: destination.parentRef,
-          projectId: destination.projectId,
-          sectionId: destination.sectionId ?? null,
-          tasks: allTasks,
-          beforeId: destination.beforeId,
-        },
-        "Task moved",
+        taskDropAction(state, task, destination, allTasks, today),
+        destination.completed === undefined
+          ? "Task moved"
+          : destination.completed
+            ? "Task completed"
+            : "Task reopened",
       );
       return;
     }
@@ -583,6 +586,11 @@ function useControllerState() {
     state,
     today,
     dragDestination,
+    statusGrouping,
+    statusCollapsed,
+    setStatusCollapsed,
+    taskExpanded,
+    setTaskExpanded,
     act,
     reset,
     storageError,

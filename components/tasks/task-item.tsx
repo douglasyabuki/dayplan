@@ -26,7 +26,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { type ComponentProps, type Ref, useId, useRef, useState } from "react";
+import { type ComponentProps, type Ref, useId, useRef } from "react";
 
 import { TagBadge } from "@/components/collections/tag-badge";
 import { Button } from "@/components/ui/button";
@@ -74,17 +74,17 @@ import {
   type Occurrence,
   type Priority,
   type Project,
-  type Tag,
+  type Tag as TaskTag,
 } from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
 
-import { TaskListPreview } from "./task-drag-feedback";
 import {
   isTaskInteractive,
   metadataClass,
   taskInteractionBoundary,
 } from "./task-interaction";
 import { type QuickActionKind, TaskMetadataButton } from "./task-quick-actions";
+import { TaskStatusGroups } from "./task-status-groups";
 
 export type TaskOpenOptions = { triggerId?: string; focusSubtask?: boolean };
 export type OpenTask = (task: Occurrence, options?: TaskOpenOptions) => void;
@@ -154,7 +154,7 @@ export function TaskItem({
   board: boolean;
   today: string;
   project?: Project;
-  tags: Tag[];
+  tags: TaskTag[];
   onOpen: (options?: TaskOpenOptions) => void;
   onComplete: () => void;
   handle: ComponentProps<typeof PopoverTrigger>["handle"];
@@ -167,13 +167,18 @@ export function TaskItem({
   /** Visual nesting: roots are 0; each rendered child increments by 1. */
   depth?: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const triggerId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const { state, operate } = useWorkspace();
   const cardRef = useRef<HTMLDivElement>(null);
   const mergedRef = useMergedRefs(cardRef, itemRef);
   const controller = useWorkspaceController();
+  const expanded = !!controller.taskExpanded[task.id];
+  const setExpanded = (open: boolean) =>
+    controller.setTaskExpanded((previous) => ({
+      ...previous,
+      [task.id]: open,
+    }));
   const ownArchived = !!state.tasks.find((t) => t.id === task.taskId)?.archived;
   const menuAction = (kind: QuickActionKind) => {
     if (cardRef.current)
@@ -272,7 +277,7 @@ export function TaskItem({
     id: `task-children:${task.id}`,
     accept: ["section-task", "row"],
     collisionPriority: depth + 1.5,
-    disabled: task.archived,
+    disabled: task.archived || controller.statusGrouping,
     data: { kind: "task-children", taskId: task.id, sectionId: task.sectionId },
   });
   const ancestry = taskIndex(state.tasks).ancestors(task.taskId).reverse();
@@ -285,6 +290,7 @@ export function TaskItem({
           type="button"
           variant="ghost"
           size="xs"
+          disabled={!!controller.dragSource}
           className="w-fit group-data-board/item:px-0.75 group-data-board/item:text-[11px] group-data-board/item:font-normal group-data-board/item:has-data-[icon=inline-start]:pl-0.75"
           onClick={(event) => event.stopPropagation()}
         >
@@ -626,8 +632,10 @@ export function TaskItem({
                     />
                   }
                 >
-                  <TaskListPreview
+                  <TaskStatusGroups
                     tasks={children}
+                    depth={depth + 1}
+                    disabled={task.archived}
                     location={{
                       parentRef: reference(task),
                       projectId: task.projectId,
@@ -643,7 +651,7 @@ export function TaskItem({
                         board={board}
                       />
                     )}
-                  </TaskListPreview>
+                  </TaskStatusGroups>
                 </CollapsibleContent>
               )}
             </Collapsible>
@@ -805,11 +813,16 @@ function NestedTaskRow({
     sensors: taskCardSensors,
     id: `nested:${task.id}`,
     index,
-    group: `children:${parent ? referenceKey(parent) : task.parentId}`,
+    group: `children:${parent ? referenceKey(parent) : task.parentId}:${controller.statusGrouping ? task.completed : "all"}`,
     collisionPriority: depth + 1,
     type: "section-task",
     accept: ["section-task", "row"],
-    data: { kind: "section-task", taskId: task.id, sectionId: task.sectionId },
+    data: {
+      kind: "section-task",
+      taskId: task.id,
+      sectionId: task.sectionId,
+      ...(controller.statusGrouping ? { completed: task.completed } : {}),
+    },
     disabled: task.archived,
   });
   return (

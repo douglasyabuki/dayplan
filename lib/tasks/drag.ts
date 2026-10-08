@@ -1,6 +1,8 @@
 import { taskIndex } from "./hierarchy";
 import {
+  isOccurrenceDate,
   occurrenceParent,
+  recurrenceRoot,
   reference,
   referenceKey,
   resolveOccurrence,
@@ -58,6 +60,8 @@ export type DragDestination = {
   sectionId?: string | null;
   ids: string[];
   beforeId?: string;
+  completed?: boolean;
+  statusOnly?: boolean;
 };
 
 /** Reorder mounted siblings only; changing parents during a drag unregisters its source. */
@@ -85,10 +89,19 @@ export function taskPreviewEntries(
     parentRef?: TaskReference | null;
     projectId: string | null;
     sectionId: string | null;
+    completed?: boolean;
   },
 ) {
   const normal = () =>
-    previewOrder(items, destination).map((task) => ({ task, preview: false }));
+    previewOrder(
+      items,
+      destination
+        ? {
+            ...destination,
+            ids: destination.ids.filter((id) => items.some((t) => t.id === id)),
+          }
+        : null,
+    ).map((task) => ({ task, preview: false }));
   if (
     !source ||
     destination?.kind !== "task" ||
@@ -104,7 +117,12 @@ export function taskPreviewEntries(
         location.projectId === destination.projectId &&
         location.sectionId === destination.sectionId
     : items.some((t) => t.id === destination.targetId);
-  if (!matches) return normal();
+  if (
+    !matches ||
+    (location?.completed !== undefined &&
+      location.completed !== (destination.completed ?? source.completed))
+  )
+    return normal();
   const entries = items.map((task) => ({ task, preview: false }));
   // Hidden siblings do not have slots; find the next visible sibling in the
   // proposed order, or append when this is an empty/filtered destination.
@@ -165,11 +183,19 @@ export function dragDestination({
   }
   const task = allTasks.find((t) => t.id === sourceData.taskId);
   if (!task || task.archived) return null;
-  const target = allTasks.find((t) => t.id === data.taskId);
+  const statusGroup = data.kind === "status-group";
+  const groupParent = statusGroup
+    ? (data.parentRef as TaskReference | null)
+    : null;
+  const target = groupParent
+    ? resolveOccurrence(state, groupParent)
+    : allTasks.find((t) => t.id === data.taskId);
+  if (groupParent && !target) return null;
   if (target?.id === task.id) {
     // Only a sibling preview actually moves the mounted source. For every
     // other destination, hitting its original card means abandoning that move.
     if (
+      statusGroup ||
       data.kind === "task-children" ||
       previous?.kind !== "task" ||
       previous.intent === "inside"
@@ -182,7 +208,9 @@ export function dragDestination({
       : !previous.parentRef;
     return sameParent &&
       previous.projectId === task.projectId &&
-      previous.sectionId === task.sectionId
+      previous.sectionId === task.sectionId &&
+      (previous.completed === undefined ||
+        previous.completed === task.completed)
       ? previous
       : null;
   }
@@ -194,11 +222,13 @@ export function dragDestination({
         ? projectId
         : (data.projectId as string | null);
   let sectionId = (data.sectionId as string | null) ?? null;
-  const targetIntent = target
-    ? data.kind === "task-children"
-      ? "inside"
-      : (intent ?? (after ? "after" : "before"))
-    : "location";
+  const targetIntent = statusGroup
+    ? "location"
+    : target
+      ? data.kind === "task-children"
+        ? "inside"
+        : (intent ?? (after ? "after" : "before"))
+      : "location";
   if (target) {
     if (target.id === task.id || target.archived) return null;
     const index = taskIndex(state.tasks);
@@ -208,7 +238,7 @@ export function dragDestination({
     )
       return null;
     parentRef =
-      targetIntent === "inside"
+      statusGroup || targetIntent === "inside"
         ? reference(target)
         : occurrenceParent(state, target);
     // Occurrence-only parent placements are not present in the template tree.
@@ -223,9 +253,15 @@ export function dragDestination({
     destinationProject = target.projectId;
     sectionId = target.sectionId;
   } else if (
-    !["section-target", "section-remove", "project"].includes(String(data.kind))
+    !["status-group", "section-target", "section-remove", "project"].includes(
+      String(data.kind),
+    )
   )
     return null;
+  const completed =
+    targetIntent !== "inside" && typeof data.completed === "boolean"
+      ? data.completed
+      : undefined;
   if (
     sectionId &&
     !sections.some(
@@ -245,9 +281,56 @@ export function dragDestination({
     })
     .sort((a, b) => a.order - b.order);
   if (targetIntent === "before" || targetIntent === "after") {
-    if (!parentRef && !manual) return null;
+    if ((!parentRef || completed !== undefined) && !manual) return null;
     // A visible nested list supplies its complete children, whereas filtered root lists do not.
-    if (siblings.some((t) => !visible.some((v) => v.id === t.id))) return null;
+    if (
+      siblings.some(
+        (t) =>
+          (completed === undefined || t.completed === completed) &&
+          !visible.some((v) => v.id === t.id),
+      )
+    )
+      return null;
+  }
+  const originalParent = occurrenceParent(state, task);
+  const sameParent =
+    referenceKey(originalParent ?? { taskId: "" }) ===
+    referenceKey(parentRef ?? { taskId: "" });
+  const statusOnly =
+    completed !== undefined &&
+    targetIntent === "location" &&
+    sameParent &&
+    task.projectId === destinationProject &&
+    task.sectionId === sectionId;
+  if (statusOnly && task.completed === completed) return null;
+  if (completed !== undefined && !statusOnly) {
+    // Reparenting can change an inherited recurrence context. Do not advertise
+    // a drop whose resulting occurrence cannot receive the requested status.
+    const template = state.tasks.find((item) => item.id === task.taskId)!;
+    const root = template.recurrence
+      ? template
+      : parentRef
+        ? recurrenceRoot(state, parentRef.taskId)
+        : undefined;
+    if (root) {
+      const date =
+        (root.id === task.context?.recurrenceRootTaskId
+          ? task.context.occurrenceDate
+          : parentRef?.context?.occurrenceDate) ??
+        task.context?.occurrenceDate ??
+        root.schedule?.date ??
+        root.deadline?.date;
+      if (!date) return null;
+      const exception =
+        state.exceptions[
+          referenceKey({
+            taskId: task.taskId,
+            context: { recurrenceRootTaskId: root.id, occurrenceDate: date },
+          })
+        ];
+      if (exception?.deleted || (!exception && !isOccurrenceDate(root, date)))
+        return null;
+    }
   }
   const result = insertion(
     siblings.map((t) => t.id),
@@ -257,14 +340,19 @@ export function dragDestination({
       : undefined,
     targetIntent === "after",
   );
-  if (!result) return null;
+  if (!result && (completed === undefined || completed === task.completed))
+    return null;
   return {
     kind: "task",
     intent: targetIntent,
-    targetId: target?.id,
+    targetId: statusGroup ? undefined : target?.id,
     parentRef,
     projectId: destinationProject,
     sectionId,
-    ...result,
+    ...(statusOnly
+      ? { ids: siblings.map((t) => t.id) }
+      : (result ?? { ids: siblings.map((t) => t.id) })),
+    ...(completed === undefined ? {} : { completed }),
+    ...(statusOnly || !result ? { statusOnly: true } : {}),
   };
 }

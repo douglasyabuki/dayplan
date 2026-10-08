@@ -87,7 +87,7 @@ import { previewOrder } from "@/lib/tasks/drag";
 import type { Occurrence, Section } from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
 
-import { TaskListPreview } from "./task-drag-feedback";
+import { TaskStatusGroups } from "./task-status-groups";
 
 export function SectionDialog({
   projectId,
@@ -593,7 +593,7 @@ function SectionColumn({
           No tasks without a section match this view
         </p>
       )}
-      <TaskListPreview
+      <TaskStatusGroups
         tasks={tasks}
         location={{ projectId: props.projectId, sectionId }}
       >
@@ -606,7 +606,7 @@ function SectionColumn({
             open={(options) => props.open(task, options)}
           />
         )}
-      </TaskListPreview>
+      </TaskStatusGroups>
     </ItemGroup>
   );
   const addTaskButton = (
@@ -777,18 +777,23 @@ function SectionTask({
   open: (options?: TaskOpenOptions) => void;
 }) {
   const { state, today, toggle } = useWorkspace();
-  const { editorHandle } = useWorkspaceController();
+  const { editorHandle, statusGrouping } = useWorkspaceController();
   const { ref: dragRef, isDragging } = useSortable({
     plugins: [SortableKeyboardPlugin],
     id: `section-task:${task.id}`,
     sensors: taskCardSensors,
     index,
-    group: `section-tasks:${task.sectionId ?? "unsectioned"}`,
+    group: `section-tasks:${task.projectId}:${task.sectionId ?? "unsectioned"}:${statusGrouping ? task.completed : "all"}`,
     type: "section-task",
     accept: ["section-task", "row"],
     collisionPriority: 1,
     disabled: task.archived,
-    data: { kind: "section-task", taskId: task.id, sectionId: task.sectionId },
+    data: {
+      kind: "section-task",
+      taskId: task.id,
+      sectionId: task.sectionId,
+      ...(statusGrouping ? { completed: task.completed } : {}),
+    },
   });
   return (
     <TaskItem

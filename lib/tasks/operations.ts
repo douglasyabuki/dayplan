@@ -1,4 +1,5 @@
 import { daysBetween, shiftDate } from "./dates";
+import type { DragDestination } from "./drag";
 import { taskIndex } from "./hierarchy";
 import {
   asOccurrence,
@@ -12,6 +13,85 @@ import {
 } from "./recurrence";
 import { type Action, materializeSubtree, reducer } from "./store";
 import type { Occurrence, Task, Workspace } from "./types";
+
+/** A drop is one transaction; a status-only drop never rewrites placement. */
+export function taskDropAction(
+  state: Workspace,
+  task: Occurrence,
+  destination: DragDestination,
+  tasks: Occurrence[],
+  today: string,
+): Action {
+  let next = state;
+  if (!destination.statusOnly) {
+    const parent = occurrenceParent(state, task);
+    const sameParent = parent
+      ? !!destination.parentRef &&
+        referenceKey(parent) === referenceKey(destination.parentRef)
+      : !destination.parentRef;
+    const reorderOnly =
+      destination.completed !== undefined &&
+      sameParent &&
+      task.projectId === destination.projectId &&
+      task.sectionId === destination.sectionId;
+    next = reducer(
+      state,
+      taskAction(
+        state,
+        reorderOnly
+          ? {
+              type: "reorderTasks",
+              tasks,
+              ids: destination.ids,
+            }
+          : {
+              type: "moveTask",
+              task,
+              tasks,
+              parentRef: destination.parentRef,
+              projectId: destination.projectId,
+              sectionId: destination.sectionId ?? null,
+              beforeId: destination.beforeId,
+            },
+      ),
+    );
+  }
+  if (destination.completed !== undefined) {
+    const root = recurrenceRoot(next, task.taskId);
+    const date =
+      (root?.id === task.context?.recurrenceRootTaskId
+        ? task.context?.occurrenceDate
+        : destination.parentRef?.context?.occurrenceDate) ??
+      task.context?.occurrenceDate ??
+      root?.schedule?.date ??
+      root?.deadline?.date;
+    const moved = destination.statusOnly
+      ? resolveOccurrence(next, reference(task))
+      : resolveOccurrence(next, {
+          taskId: task.taskId,
+          ...(root && date
+            ? {
+                context: {
+                  recurrenceRootTaskId: root.id,
+                  occurrenceDate: date,
+                },
+              }
+            : {}),
+        });
+    if (!moved)
+      throw new Error(
+        "This task occurrence cannot be moved to that destination.",
+      );
+    if (moved.completed !== destination.completed)
+      next = reducer(next, {
+        type: "complete",
+        ref: reference(moved),
+        completed: destination.completed,
+        today,
+      });
+  }
+  return { type: "replace", state: next };
+}
 
 export function validateTaskDraft(draft: Task): string | undefined {
   if (!draft.title.trim()) return "Give this task a title.";
