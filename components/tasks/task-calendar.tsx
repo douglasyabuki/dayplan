@@ -29,6 +29,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
   SheetContent,
@@ -61,6 +62,9 @@ type Props = {
   create: (date?: string, time?: string) => void;
 };
 
+const HOUR_HEIGHT = 128;
+const DAY_COLUMN_MIN_WIDTH = 128;
+
 export function TaskCalendarView({
   tasks,
   date,
@@ -74,7 +78,10 @@ export function TaskCalendarView({
   const [query, setQuery] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 7 * 64;
+    const viewport = scrollRef.current?.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (viewport) viewport.scrollTop = 7 * HOUR_HEIGHT;
   }, [mode]);
   function navigate(direction: number) {
     if (mode === "month") {
@@ -89,7 +96,7 @@ export function TaskCalendarView({
     mode === "month"
       ? startOfWeek(`${date.slice(0, 7)}-01`)
       : mode === "week"
-        ? startOfWeek(date)
+        ? startOfWeek(date, 0)
         : date;
   const days = Array.from(
     { length: mode === "month" ? 42 : mode === "week" ? 7 : 1 },
@@ -262,101 +269,126 @@ export function TaskCalendarView({
           </div>
         ) : (
           <>
-            <div
-              className="time-grid-header grid shrink-0 grid-cols-[44px_repeat(var(--days),minmax(0,1fr))] border-t border-r border-l max-md:grid-cols-[30px_repeat(var(--days),minmax(0,1fr))]"
-              style={{ "--days": days.length } as CSSProperties}
-            >
-              <div className="time-gutter" />
-              {days.map((day) => (
-                <div
-                  key={day}
-                  className="day-heading [&>span]:text-muted-foreground flex flex-col items-center gap-1 border-l py-3 [&>span]:text-[10px] [&>strong]:flex [&>strong]:size-7 [&>strong]:items-center [&>strong]:justify-center [&>strong]:rounded-full [&>strong]:text-base [&>strong]:font-medium"
-                >
-                  <span>{formatDate(day, { weekday: "short" })}</span>
-                  <strong
-                    className={cn(
-                      day === today &&
-                        "current-day bg-primary text-primary-foreground",
-                    )}
-                  >
-                    {parseDay(day).getDate()}
-                  </strong>
-                </div>
-              ))}
-            </div>
-            <div
-              className="all-day-row grid max-h-[18dvh] min-h-12 shrink-0 grid-cols-[44px_repeat(var(--days),minmax(0,1fr))] overflow-y-auto border-r border-b border-l max-md:grid-cols-[30px_repeat(var(--days),minmax(0,1fr))]"
-              style={{ "--days": days.length } as CSSProperties}
-            >
-              <span className="all-day-label text-muted-foreground pt-2 text-center text-[9px]">
-                All day
-              </span>
-              {days.map((day) => (
-                <DropZone
-                  key={day}
-                  id={`all:${day}`}
-                  data={{ kind: "calendar", date: day, mode: "all" }}
-                  className="all-day-cell flex flex-col gap-1 border-l px-1 py-1"
-                >
-                  {tasks
-                    .filter(
-                      (t) =>
-                        (t.schedule?.date === day && !t.schedule.time) ||
-                        (!t.schedule && t.deadline?.date === day),
-                    )
-                    .map((t) => (
-                      <CalendarCard
-                        key={t.id}
-                        task={t}
-                        context={`all:${day}`}
-                        compact
-                        onClick={() => open(t)}
-                      />
-                    ))}
-                  <button
-                    className="text-muted-foreground hover:bg-accent hover:text-primary flex size-5 items-center justify-center rounded opacity-40 hover:opacity-100"
-                    aria-label={`Add task on ${day}`}
-                    onClick={() => create(day)}
-                  >
-                    <Plus className="size-3" />
-                  </button>
-                </DropZone>
-              ))}
-            </div>
-            <div
-              className="time-grid-scroll min-h-0 flex-1 scrollbar-thin overflow-y-auto border-r border-b border-l"
-              ref={scrollRef}
-            >
+            <div className="min-h-0 flex-1 overflow-x-auto">
               <div
-                className="time-grid relative grid h-384 grid-cols-[44px_repeat(var(--days),minmax(0,1fr))] max-md:grid-cols-[30px_repeat(var(--days),minmax(0,1fr))]"
-                style={{ "--days": days.length } as CSSProperties}
+                className="flex h-full min-h-0 flex-col"
+                style={{
+                  width: `max(100%, ${44 + days.length * DAY_COLUMN_MIN_WIDTH}px)`,
+                }}
               >
-                <div className="hour-labels [&>span]:text-muted-foreground relative [&>span]:absolute [&>span]:right-2 [&>span]:-translate-y-1/2 [&>span]:text-[9px]">
-                  {Array.from({ length: 24 }, (_, hour) => (
-                    <span key={hour} style={{ top: hour * 64 }}>
-                      {hour === 0
-                        ? ""
-                        : timeLabel(`${String(hour).padStart(2, "0")}:00`)}
-                    </span>
+                <div
+                  className="time-grid-header grid shrink-0 grid-cols-[44px_repeat(var(--days),minmax(var(--day-min-width),1fr))] border-t border-r border-l max-md:grid-cols-[30px_repeat(var(--days),minmax(var(--day-min-width),1fr))]"
+                  style={
+                    {
+                      "--days": days.length,
+                      "--day-min-width": `${DAY_COLUMN_MIN_WIDTH}px`,
+                    } as CSSProperties
+                  }
+                >
+                  <div className="time-gutter" />
+                  {days.map((day) => (
+                    <div
+                      key={day}
+                      className="day-heading [&>span]:text-muted-foreground flex flex-col items-center gap-1 border-l py-3 [&>span]:text-[10px] [&>strong]:flex [&>strong]:size-7 [&>strong]:items-center [&>strong]:justify-center [&>strong]:rounded-full [&>strong]:text-base [&>strong]:font-medium"
+                    >
+                      <span>{formatDate(day, { weekday: "short" })}</span>
+                      <strong
+                        className={cn(
+                          day === today &&
+                            "current-day bg-primary text-primary-foreground",
+                        )}
+                      >
+                        {parseDay(day).getDate()}
+                      </strong>
+                    </div>
                   ))}
                 </div>
-                {days.map((day) => (
-                  <DayColumn
-                    key={day}
-                    day={day}
-                    tasks={tasks}
-                    open={open}
-                    create={create}
-                  />
-                ))}
+                <div
+                  className="all-day-row grid max-h-[18dvh] min-h-12 shrink-0 grid-cols-[44px_repeat(var(--days),minmax(var(--day-min-width),1fr))] overflow-x-hidden overflow-y-auto border-r border-b border-l max-md:grid-cols-[30px_repeat(var(--days),minmax(var(--day-min-width),1fr))]"
+                  style={
+                    {
+                      "--days": days.length,
+                      "--day-min-width": `${DAY_COLUMN_MIN_WIDTH}px`,
+                    } as CSSProperties
+                  }
+                >
+                  <span className="all-day-label text-muted-foreground pt-2 text-center text-[9px]">
+                    All day
+                  </span>
+                  {days.map((day) => (
+                    <DropZone
+                      key={day}
+                      id={`all:${day}`}
+                      data={{ kind: "calendar", date: day, mode: "all" }}
+                      className="all-day-cell flex flex-col gap-1 border-l px-1 py-1"
+                    >
+                      {tasks
+                        .filter(
+                          (t) =>
+                            (t.schedule?.date === day && !t.schedule.time) ||
+                            (!t.schedule && t.deadline?.date === day),
+                        )
+                        .map((t) => (
+                          <CalendarCard
+                            key={t.id}
+                            task={t}
+                            context={`all:${day}`}
+                            compact
+                            onClick={() => open(t)}
+                          />
+                        ))}
+                      <button
+                        className="text-muted-foreground hover:bg-accent hover:text-primary flex size-5 items-center justify-center rounded opacity-40 hover:opacity-100"
+                        aria-label={`Add task on ${day}`}
+                        onClick={() => create(day)}
+                      >
+                        <Plus className="size-3" />
+                      </button>
+                    </DropZone>
+                  ))}
+                </div>
+                <ScrollArea
+                  className="time-grid-scroll min-h-0 flex-1 border-r border-b border-l"
+                  ref={scrollRef}
+                >
+                  <div
+                    className="time-grid relative grid grid-cols-[44px_repeat(var(--days),minmax(var(--day-min-width),1fr))] max-md:grid-cols-[30px_repeat(var(--days),minmax(var(--day-min-width),1fr))]"
+                    style={
+                      {
+                        "--days": days.length,
+                        "--day-min-width": `${DAY_COLUMN_MIN_WIDTH}px`,
+                        height: HOUR_HEIGHT * 24,
+                      } as CSSProperties
+                    }
+                  >
+                    <div className="hour-labels [&>span]:text-muted-foreground relative [&>span]:absolute [&>span]:right-2 [&>span]:-translate-y-1/2 [&>span]:text-[9px]">
+                      {Array.from({ length: 24 }, (_, hour) => (
+                        <span key={hour} style={{ top: hour * HOUR_HEIGHT }}>
+                          {hour === 0
+                            ? ""
+                            : timeLabel(`${String(hour).padStart(2, "0")}:00`)}
+                        </span>
+                      ))}
+                    </div>
+                    {days.map((day) => (
+                      <DayColumn
+                        key={day}
+                        day={day}
+                        tasks={tasks}
+                        open={open}
+                        create={create}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
             </div>
           </>
         )}
       </div>
-      <aside className="ml-5 hidden min-h-0 w-56 shrink-0 overflow-y-auto border-l pl-5 xl:block">
+      <ScrollArea className="ml-5 hidden h-full min-h-0 w-56 shrink-0 border-l px-5 xl:block">
         {renderTray("tray-desktop")}
-      </aside>
+      </ScrollArea>
       <Sheet open={trayOpen} onOpenChange={setTrayOpen}>
         <SheetContent>
           <SheetHeader>
@@ -537,7 +569,7 @@ function DayColumn({
             id={`slot:${day}:${time}`}
             data={{ kind: "calendar", date: day, time, mode: "time" }}
             className={cn(
-              "time-slot [&>button]:hover:bg-accent/30 h-4 [&>button]:block [&>button]:size-full [&>button]:cursor-default",
+              "time-slot [&>button]:hover:bg-accent/30 h-8 [&>button]:block [&>button]:size-full [&>button]:cursor-default",
               i % 4 === 0 && "hour-start border-t",
             )}
           >
@@ -554,8 +586,11 @@ function DayColumn({
           key={segment.task.id}
           className="pointer-events-none absolute pr-1 pl-0.5 *:pointer-events-auto"
           style={{
-            top: (segment.start / 60) * 64,
-            height: Math.max(16, ((segment.end - segment.start) / 60) * 64 - 2),
+            top: (segment.start / 60) * HOUR_HEIGHT,
+            height: Math.max(
+              32,
+              ((segment.end - segment.start) / 60) * HOUR_HEIGHT - 2,
+            ),
             left: `${(segment.lane / segment.lanes) * 100}%`,
             width: `${100 / segment.lanes}%`,
           }}
@@ -571,7 +606,7 @@ function DayColumn({
       {day === today && (
         <div
           className="now-line border-destructive [&>span]:bg-destructive pointer-events-none absolute right-0 left-0 border-t [&>span]:absolute [&>span]:-top-1 [&>span]:-left-1 [&>span]:size-1.5 [&>span]:rounded-full"
-          style={{ top: (timeToMinutes(parts) / 60) * 64 }}
+          style={{ top: (timeToMinutes(parts) / 60) * HOUR_HEIGHT }}
         >
           <span />
         </div>

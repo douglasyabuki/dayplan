@@ -311,7 +311,16 @@ function useControllerState() {
   const displayedSections = state.sections;
 
   const dragGeneration = useRef(0);
+  const statusHover = useRef<{
+    key: string;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null>(null);
+  function clearStatusHover() {
+    if (statusHover.current?.timer) clearTimeout(statusHover.current.timer);
+    statusHover.current = null;
+  }
   function clearDrag() {
+    clearStatusHover();
     const generation = ++dragGeneration.current;
     dragDraft.current = { sourceId: null, destination: null };
     // Unregistering a nested sortable can dispatch a canceled drag from dnd-kit's
@@ -328,6 +337,7 @@ function useControllerState() {
 
   function dragStart(event: Pick<DragMoveEvent, "operation">) {
     closeTaskActions();
+    clearStatusHover();
     dragGeneration.current++;
     const sourceId = event.operation.source?.data.taskId as string | undefined;
     dragDraft.current = { sourceId: sourceId ?? null, destination: null };
@@ -366,6 +376,7 @@ function useControllerState() {
 
   function destinationFor(
     event: DragMoveEvent | DragEndEvent,
+    targetData?: Record<string, unknown>,
   ): DragDestination | null {
     const { source, target, position, activatorEvent } = event.operation;
     const coordinates = "to" in event && event.to ? event.to : position.current;
@@ -386,11 +397,12 @@ function useControllerState() {
       )
         return dragDraft.current.destination;
     }
-    if (!source || !target) return null;
-    const data = target.data;
+    if (!source) return null;
+    const data = targetData ?? target?.data;
+    if (!data) return null;
     const sourceData = source.data;
     const manual = (params.get("sort") ?? "manual") === "manual";
-    const rect = target.element?.getBoundingClientRect();
+    const rect = target?.element?.getBoundingClientRect();
     const horizontal = sourceData.kind === "section" && layout === "board";
     const keyboard = activatorEvent?.type === "keydown";
     const after = rect
@@ -400,7 +412,7 @@ function useControllerState() {
           ? coordinates.x >= rect.left + rect.width / 2
           : coordinates.y >= rect.top + rect.height / 2
       : false;
-    const header = target.element
+    const header = target?.element
       ?.querySelector<HTMLElement>(".task-title")
       ?.getBoundingClientRect();
     const intent =
@@ -447,7 +459,44 @@ function useControllerState() {
       if (["ArrowUp", "ArrowLeft"].includes(key))
         keyboardDirection.current = "before";
     }
-    const destination = destinationFor(event);
+    const coordinates =
+      "to" in event && event.to ? event.to : event.operation.position.current;
+    const hoveredGroup = document
+      .elementFromPoint(coordinates.x, coordinates.y)
+      ?.closest<HTMLElement>("[data-status-key]");
+    const hoveredKey = hoveredGroup?.dataset.statusKey;
+    const collapsed = hoveredGroup?.dataset.statusCollapsed === "true";
+    if (hoveredKey !== statusHover.current?.key) {
+      clearStatusHover();
+      if (hoveredKey && collapsed) {
+        const timer = setTimeout(() => {
+          setStatusCollapsed((previous) =>
+            previous[hoveredKey]
+              ? { ...previous, [hoveredKey]: false }
+              : previous,
+          );
+          if (statusHover.current?.key === hoveredKey)
+            statusHover.current.timer = null;
+        }, 400);
+        statusHover.current = { key: hoveredKey, timer };
+      }
+    }
+    const keepHoveredGroup = hoveredKey === statusHover.current?.key;
+    const statusGroupData =
+      hoveredGroup && collapsed
+        ? {
+            kind: "status-group",
+            projectId: hoveredGroup.dataset.statusProjectId || null,
+            sectionId: hoveredGroup.dataset.statusSectionId || null,
+            parentRef: JSON.parse(
+              hoveredGroup.dataset.statusParentRef ?? "null",
+            ),
+            completed: hoveredGroup.dataset.statusCompleted === "true",
+          }
+        : undefined;
+    const destination =
+      destinationFor(event, statusGroupData) ??
+      (keepHoveredGroup ? dragDraft.current.destination : null);
     dragDraft.current.destination = destination;
     const generation = dragGeneration.current;
     // Registration/layout changes can emit dragover during insertion effects.
@@ -458,7 +507,9 @@ function useControllerState() {
     });
   }
   function dragEnd(event: DragEndEvent) {
-    const destination = destinationFor(event);
+    const destination = event.canceled
+      ? null
+      : (destinationFor(event) ?? dragDraft.current.destination);
     const { source, target } = event.operation;
     clearDrag();
     if (event.canceled) return;

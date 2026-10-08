@@ -75,7 +75,7 @@ function StatusGroup({
   const { ref, isDropTarget } = useDroppable({
     id: `status-group:${key}`,
     accept: ["section-task", "row"],
-    collisionPriority: depth + 0.5,
+    collisionPriority: depth + (collapsed ? 2 : 0.5),
     disabled,
     data: { kind: "status-group", ...location, completed },
   });
@@ -114,6 +114,12 @@ function StatusGroup({
       data-status-parent={
         location.parentRef ? referenceKey(location.parentRef) : "root"
       }
+      data-status-key={key}
+      data-status-collapsed={collapsed || undefined}
+      data-status-project-id={location.projectId ?? ""}
+      data-status-section-id={location.sectionId ?? ""}
+      data-status-parent-ref={JSON.stringify(location.parentRef ?? null)}
+      data-status-completed={completed}
       className={cn(
         "min-w-0 rounded-md",
         isDropTarget && "bg-accent/50",

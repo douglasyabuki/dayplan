@@ -61,10 +61,11 @@ async function seed(page: Page, board: boolean) {
   await expect(card(page, "parent")).toBeVisible();
 }
 async function expand(page: Page, id: string) {
-  await card(page, id)
+  const trigger = card(page, id)
     .getByRole("button", { name: /subtasks/ })
-    .first()
-    .click();
+    .first();
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
 }
 async function startDrag(page: Page, id: string) {
   const source = card(page, id).getByRole("button", {

@@ -90,13 +90,14 @@ export function formatDate(
 }
 
 /**
- * Finds the Monday on or before the supplied date.
+ * Finds the start of the week on or before the supplied date.
  * @param value Date key in `YYYY-MM-DD` form.
- * @returns Date key for the start of that Monday-based week.
+ * @param weekStartsOn Weekday to start on, where Sunday is `0` and Monday is `1`.
+ * @returns Date key for the start of that week.
  * @example `startOfWeek("2026-09-30")` returns `"2026-09-28"`.
  */
-export function startOfWeek(value: string) {
-  return addDays(value, -((parseDay(value).getDay() + 6) % 7));
+export function startOfWeek(value: string, weekStartsOn: 0 | 1 = 1) {
+  return addDays(value, -((parseDay(value).getDay() - weekStartsOn + 7) % 7));
 }
 
 /**
