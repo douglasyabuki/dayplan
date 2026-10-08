@@ -11,7 +11,7 @@ import {
   ref,
   state,
   task,
-} from "./task-fixtures";
+} from "../task-fixtures";
 
 test("location is derived, and moving a root does not rewrite descendants", () => {
   const s = state([task("a"), child("b", "a"), child("c", "b")]);

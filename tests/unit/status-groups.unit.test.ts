@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import type { DragDestination } from "../lib/tasks/drag";
-import type { Workspace } from "../lib/tasks/types";
+import type { DragDestination } from "../../lib/tasks/drag";
+import type { Workspace } from "../../lib/tasks/types";
 import {
   child,
   daily,
@@ -12,7 +12,7 @@ import {
   ref,
   state,
   task,
-} from "./task-fixtures";
+} from "../task-fixtures";
 
 const initial = state([
   task("parent"),

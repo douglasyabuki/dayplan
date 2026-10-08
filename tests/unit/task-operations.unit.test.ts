@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import type { Occurrence, Task, Workspace } from "../lib/tasks/types";
+import type { Occurrence, Task, Workspace } from "../../lib/tasks/types";
 import {
   child,
   daily,
@@ -12,7 +12,7 @@ import {
   ref,
   state,
   task,
-} from "./task-fixtures";
+} from "../task-fixtures";
 
 const recurring = () =>
   state([

@@ -11,7 +11,7 @@ import {
   ref,
   state,
   task,
-} from "./task-fixtures";
+} from "../task-fixtures";
 
 test("field patches retain immediate completion and Undo state", () => {
   const before = state([task("a"), child("b", "a")]);

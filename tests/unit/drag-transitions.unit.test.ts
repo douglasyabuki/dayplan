@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import type { DragDestination } from "../lib/tasks/drag";
-import type { Occurrence, Workspace } from "../lib/tasks/types";
-import { child, domain as d, get, ref, state, task } from "./task-fixtures";
+import type { DragDestination } from "../../lib/tasks/drag";
+import type { Occurrence, Workspace } from "../../lib/tasks/types";
+import { child, domain as d, get, ref, state, task } from "../task-fixtures";
 
 const initial = state([
   ...[null, "a", "b"].flatMap((sectionId) => {

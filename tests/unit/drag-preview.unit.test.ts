@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import type { DragDestination } from "../lib/tasks/drag";
-import { child, domain as d, get, ref, state, task } from "./task-fixtures";
+import type { DragDestination } from "../../lib/tasks/drag";
+import { child, domain as d, get, ref, state, task } from "../task-fixtures";
 
 const workspace = state([
   task("source", { sectionId: "a" }),
