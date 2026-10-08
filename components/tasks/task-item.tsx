@@ -32,6 +32,11 @@ import { TagBadge } from "@/components/collections/tag-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuGroup,
@@ -164,7 +169,6 @@ export function TaskItem({
 }) {
   const [expanded, setExpanded] = useState(false);
   const triggerId = useId();
-  const childrenId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const { state, operate } = useWorkspace();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -275,24 +279,26 @@ export function TaskItem({
   const timing = compactTiming(task.schedule, task.deadline, today);
   const hasActions = !task.archived || task.priority !== "none";
   const subtasksToggle = children.length > 0 && (
-    <Button
-      type="button"
-      variant="ghost"
-      size="xs"
-      className="w-fit group-data-board/item:px-0.75 group-data-board/item:text-[11px] group-data-board/item:font-normal group-data-board/item:has-data-[icon=inline-start]:pl-0.75"
-      aria-expanded={expanded || receiving}
-      aria-controls={childrenId}
-      onClick={(event) => {
-        event.stopPropagation();
-        setExpanded(!expanded);
-      }}
-    >
-      <ChevronDown
-        data-icon="inline-start"
-        className={cn(!expanded && "-rotate-90")}
-      />
-      {complete}/{allChildren.length} subtasks
-    </Button>
+    <CollapsibleTrigger
+      render={
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="w-fit group-data-board/item:px-0.75 group-data-board/item:text-[11px] group-data-board/item:font-normal group-data-board/item:has-data-[icon=inline-start]:pl-0.75"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <ChevronDown
+            data-icon="inline-start"
+            className={cn(
+              !expanded && !receiving && "-rotate-90",
+              "duration-150",
+            )}
+          />
+          {complete}/{allChildren.length} subtasks
+        </Button>
+      }
+    />
   );
   return (
     <ContextMenu
@@ -355,274 +361,292 @@ export function TaskItem({
                 triggerRef.current?.click();
             }}
           >
-            <ItemMedia className="translate-none gap-0.5 pt-0.5 group-data-board/item:col-start-1 group-data-board/item:row-start-1 group-data-board/item:row-end-3 group-data-board/item:flex-col group-data-board/item:gap-1 group-data-board/item:pt-1">
-              <TaskCheckbox
-                priority={task.priority}
-                checked={task.completed}
-                className="after:inset-x-0"
-                onCheckedChange={onComplete}
-                aria-label={`${task.completed ? "Reopen" : "Complete"} ${task.title}`}
-              />
-            </ItemMedia>
-            <ItemContent
-              className={cn(
-                "min-w-0 gap-0.5 group-data-board/item:col-start-2 group-data-board/item:row-start-1",
-                !hasActions && "group-data-board/item:-col-end-1",
-              )}
+            <Collapsible
+              className="contents"
+              open={expanded || receiving}
+              onOpenChange={setExpanded}
             >
-              {ancestry.length > 0 &&
-                (!hierarchical ||
-                  depth >= 4 ||
-                  !occurrenceParent(state, task)) && (
-                  <p
-                    className="text-muted-foreground truncate text-xs"
-                    title={ancestry.map((t) => t.title).join(" / ")}
-                  >
-                    {ancestry.map((t) => t.title).join(" / ")}
-                  </p>
+              <ItemMedia className="translate-none gap-0.5 pt-0.5 group-data-board/item:col-start-1 group-data-board/item:row-start-1 group-data-board/item:row-end-3 group-data-board/item:flex-col group-data-board/item:gap-1 group-data-board/item:pt-1">
+                <TaskCheckbox
+                  priority={task.priority}
+                  checked={task.completed}
+                  className="after:inset-x-0"
+                  onCheckedChange={onComplete}
+                  aria-label={`${task.completed ? "Reopen" : "Complete"} ${task.title}`}
+                />
+              </ItemMedia>
+              <ItemContent
+                className={cn(
+                  "min-w-0 gap-0.5 group-data-board/item:col-start-2 group-data-board/item:row-start-1",
+                  !hasActions && "group-data-board/item:-col-end-1",
                 )}
-              <ItemTitle
-                className="w-full leading-4.5 group-data-board/item:overflow-visible"
-                // Shrink one pixel per level, with a readable 12px floor (in rem).
-                style={{
-                  fontSize: `${Math.max(12, 14 - Math.max(0, depth)) / 16}rem`,
-                }}
               >
-                <PopoverTrigger
-                  ref={triggerRef}
-                  id={triggerId}
-                  handle={handle}
-                  onClick={(event) => {
-                    if (!event.defaultPrevented) onOpen({ triggerId });
-                  }}
-                  className={cn(
-                    "task-title group-data-completed/item:text-muted-foreground min-w-0 flex-1 cursor-pointer text-left outline-none group-data-board/item:min-h-6 group-data-completed/item:line-through focus-visible:underline",
-                    dragging && "cursor-grabbing",
-                    depth >= 1
-                      ? "truncate"
-                      : "wrap-break-word group-data-board/item:line-clamp-2 group-data-board/item:wrap-anywhere",
-                  )}
-                  title={depth >= 1 ? task.title : undefined}
-                  aria-label={`Edit ${task.title}`}
-                >
-                  {task.title}
-                </PopoverTrigger>
-              </ItemTitle>
-              {!board && task.description && (
-                <ItemDescription className="text-xs leading-4">
-                  {task.description}
-                </ItemDescription>
-              )}
-              {!board &&
-                (task.deadline ||
-                  task.schedule ||
-                  task.recurrence ||
-                  project) && (
-                  <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-4 wrap-anywhere [&_svg]:size-3">
-                    {task.deadline && (
-                      <TaskMetadataButton
-                        task={task}
-                        kind="deadline"
-                        data-overdue={
-                          (!task.completed && task.deadline.date < today) ||
-                          undefined
-                        }
-                        className="data-overdue:text-destructive flex items-center gap-1"
-                      >
-                        <CalendarX className="shrink-0" aria-hidden="true" />
-                        {deadlineLabel(task.deadline, today)}
-                      </TaskMetadataButton>
-                    )}
-                    {task.schedule && (
-                      <TaskMetadataButton
-                        task={task}
-                        kind="schedule"
-                        className="flex items-center gap-1"
-                      >
-                        <CalendarDays className="shrink-0" aria-hidden="true" />
-                        {scheduleLabel(task.schedule, today)}
-                      </TaskMetadataButton>
-                    )}
-                    {task.recurrence && <Repeat2 aria-label="Recurring task" />}
-                    {project && <span>{project.name}</span>}
-                  </div>
-                )}
-              {!board && tags.length > 0 && (
-                <div
-                  className="flex min-w-0 flex-wrap items-center gap-1"
-                  aria-label="Tags"
-                >
-                  {tags.map((tag) => (
-                    <Link
-                      key={tag.id}
-                      href={workspaceHref({ view: "tags", selectedId: tag.id })}
-                      {...taskInteractionBoundary}
-                      className={cn(metadataClass, "min-w-0 shrink")}
+                {ancestry.length > 0 &&
+                  (!hierarchical ||
+                    depth >= 4 ||
+                    !occurrenceParent(state, task)) && (
+                    <p
+                      className="text-muted-foreground truncate text-xs"
+                      title={ancestry.map((t) => t.title).join(" / ")}
                     >
-                      <TagBadge tag={tag} compact />
-                    </Link>
-                  ))}
-                </div>
-              )}
-              {!board && subtasksToggle}
-            </ItemContent>
-            {hasActions && (
-              <ItemActions className="group-data-board/item:col-start-3 group-data-board/item:row-start-1 group-data-board/item:min-h-6 group-data-board/item:gap-0.5">
-                {task.priority !== "none" && (
-                  <TaskMetadataButton
-                    task={task}
-                    kind="priority"
-                    aria-label={`Priority: ${task.priority}`}
+                      {ancestry.map((t) => t.title).join(" / ")}
+                    </p>
+                  )}
+                <ItemTitle
+                  className="w-full leading-4.5 group-data-board/item:overflow-visible"
+                  // Shrink one pixel per level, with a readable 12px floor (in rem).
+                  style={{
+                    fontSize: `${Math.max(12, 14 - Math.max(0, depth)) / 16}rem`,
+                  }}
+                >
+                  <PopoverTrigger
+                    ref={triggerRef}
+                    id={triggerId}
+                    handle={handle}
+                    onClick={(event) => {
+                      if (!event.defaultPrevented) onOpen({ triggerId });
+                    }}
+                    className={cn(
+                      "task-title group-data-completed/item:text-muted-foreground min-w-0 flex-1 cursor-pointer text-left outline-none group-data-board/item:min-h-6 group-data-completed/item:line-through focus-visible:underline",
+                      dragging && "cursor-grabbing",
+                      depth >= 1
+                        ? "truncate"
+                        : "wrap-break-word group-data-board/item:line-clamp-2 group-data-board/item:wrap-anywhere",
+                    )}
+                    title={depth >= 1 ? task.title : undefined}
+                    aria-label={`Edit ${task.title}`}
                   >
-                    <Flag
-                      className="size-3.5 text-(--priority-color)"
-                      data-priority={task.priority}
-                    />
-                  </TaskMetadataButton>
+                    {task.title}
+                  </PopoverTrigger>
+                </ItemTitle>
+                {!board && task.description && (
+                  <ItemDescription className="text-xs leading-4">
+                    {task.description}
+                  </ItemDescription>
                 )}
-              </ItemActions>
-            )}
-            {board &&
-              (timing.scheduled ||
-                timing.due ||
-                task.recurrence ||
-                project ||
-                tags.length > 0 ||
-                subtasksToggle) && (
-                <ItemFooter className="text-muted-foreground col-start-2 -col-end-1 row-start-2 min-w-0 flex-col items-stretch gap-0.5 text-[11px] leading-4">
-                  {(timing.scheduled || timing.due || task.recurrence) && (
-                    <div className="text-muted-foreground text-[11px] leading-4 wrap-anywhere [&_svg]:size-3 [&_svg]:align-[-2px]">
-                      {timing.scheduled && (
-                        <TaskMetadataButton
-                          task={task}
-                          kind="schedule"
-                          className={cn(depth >= 1 && "block")}
-                        >
-                          <CalendarDays
-                            className="mr-1 inline-block"
-                            aria-hidden="true"
-                          />
-                          <span className="sr-only">Scheduled </span>
-                          {timing.scheduled}
-                        </TaskMetadataButton>
-                      )}
-                      {depth === 0 && timing.scheduled && timing.due && (
-                        <span aria-hidden="true"> · </span>
-                      )}
-                      {timing.due && (
+                {!board &&
+                  (task.deadline ||
+                    task.schedule ||
+                    task.recurrence ||
+                    project) && (
+                    <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-4 wrap-anywhere [&_svg]:size-3">
+                      {task.deadline && (
                         <TaskMetadataButton
                           task={task}
                           kind="deadline"
                           data-overdue={
-                            (!task.completed && task.deadline!.date < today) ||
+                            (!task.completed && task.deadline.date < today) ||
                             undefined
                           }
-                          className={cn(
-                            "data-overdue:text-destructive",
-                            depth >= 1 && "block",
-                          )}
+                          className="data-overdue:text-destructive flex items-center gap-1"
                         >
-                          <CalendarX
-                            className="mr-1 inline-block"
+                          <CalendarX className="shrink-0" aria-hidden="true" />
+                          {deadlineLabel(task.deadline, today)}
+                        </TaskMetadataButton>
+                      )}
+                      {task.schedule && (
+                        <TaskMetadataButton
+                          task={task}
+                          kind="schedule"
+                          className="flex items-center gap-1"
+                        >
+                          <CalendarDays
+                            className="shrink-0"
                             aria-hidden="true"
                           />
-                          {depth >= 1 && task.deadline
-                            ? deadlineLabel(task.deadline, today)
-                            : timing.due}
+                          {scheduleLabel(task.schedule, today)}
                         </TaskMetadataButton>
                       )}
                       {task.recurrence && (
-                        <Repeat2
-                          className="ml-1 inline-block"
-                          aria-label="Recurring task"
-                        />
+                        <Repeat2 aria-label="Recurring task" />
                       )}
+                      {project && <span>{project.name}</span>}
                     </div>
                   )}
-                  {(project || tags.length > 0) && (
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
-                      <div className="flex min-w-0 flex-[1_1_100px] items-center gap-0.75">
-                        {project && (
-                          <span
-                            className="max-w-[40%] min-w-0 flex-[0_1_auto] truncate"
-                            title={project.name}
+                {!board && tags.length > 0 && (
+                  <div
+                    className="flex min-w-0 flex-wrap items-center gap-1"
+                    aria-label="Tags"
+                  >
+                    {tags.map((tag) => (
+                      <Link
+                        key={tag.id}
+                        href={workspaceHref({
+                          view: "tags",
+                          selectedId: tag.id,
+                        })}
+                        {...taskInteractionBoundary}
+                        className={cn(metadataClass, "min-w-0 shrink")}
+                      >
+                        <TagBadge tag={tag} compact />
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {!board && subtasksToggle}
+              </ItemContent>
+              {hasActions && (
+                <ItemActions className="group-data-board/item:col-start-3 group-data-board/item:row-start-1 group-data-board/item:min-h-6 group-data-board/item:gap-0.5">
+                  {task.priority !== "none" && (
+                    <TaskMetadataButton
+                      task={task}
+                      kind="priority"
+                      aria-label={`Priority: ${task.priority}`}
+                    >
+                      <Flag
+                        className="size-3.5 text-(--priority-color)"
+                        data-priority={task.priority}
+                      />
+                    </TaskMetadataButton>
+                  )}
+                </ItemActions>
+              )}
+              {board &&
+                (timing.scheduled ||
+                  timing.due ||
+                  task.recurrence ||
+                  project ||
+                  tags.length > 0 ||
+                  subtasksToggle) && (
+                  <ItemFooter className="text-muted-foreground col-start-2 -col-end-1 row-start-2 min-w-0 flex-col items-stretch gap-0.5 text-[11px] leading-4">
+                    {(timing.scheduled || timing.due || task.recurrence) && (
+                      <div className="text-muted-foreground text-[11px] leading-4 wrap-anywhere [&_svg]:size-3 [&_svg]:align-[-2px]">
+                        {timing.scheduled && (
+                          <TaskMetadataButton
+                            task={task}
+                            kind="schedule"
+                            className={cn(depth >= 1 && "block")}
                           >
-                            {project.name}
-                          </span>
+                            <CalendarDays
+                              className="mr-1 inline-block"
+                              aria-hidden="true"
+                            />
+                            <span className="sr-only">Scheduled </span>
+                            {timing.scheduled}
+                          </TaskMetadataButton>
                         )}
-                        {tags.slice(0, 2).map((tag) => (
-                          <Link
-                            key={tag.id}
-                            href={workspaceHref({
-                              view: "tags",
-                              selectedId: tag.id,
-                            })}
-                            {...taskInteractionBoundary}
-                            className={cn(metadataClass, "min-w-0 shrink")}
+                        {depth === 0 && timing.scheduled && timing.due && (
+                          <span aria-hidden="true"> · </span>
+                        )}
+                        {timing.due && (
+                          <TaskMetadataButton
+                            task={task}
+                            kind="deadline"
+                            data-overdue={
+                              (!task.completed &&
+                                task.deadline!.date < today) ||
+                              undefined
+                            }
+                            className={cn(
+                              "data-overdue:text-destructive",
+                              depth >= 1 && "block",
+                            )}
                           >
-                            <TagBadge tag={tag} compact />
-                          </Link>
-                        ))}
-                        {tags.length > 2 && (
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            className="px-0.75 text-[11px] font-normal"
-                            aria-label={`Show all ${tags.length} tags for ${task.title}`}
-                            onClick={() => triggerRef.current?.click()}
-                          >
-                            +{tags.length - 2}
-                          </Button>
+                            <CalendarX
+                              className="mr-1 inline-block"
+                              aria-hidden="true"
+                            />
+                            {depth >= 1 && task.deadline
+                              ? deadlineLabel(task.deadline, today)
+                              : timing.due}
+                          </TaskMetadataButton>
+                        )}
+                        {task.recurrence && (
+                          <Repeat2
+                            className="ml-1 inline-block"
+                            aria-label="Recurring task"
+                          />
                         )}
                       </div>
-                    </div>
-                  )}
-                  {subtasksToggle && (
-                    <div className="flex min-w-0">{subtasksToggle}</div>
-                  )}
-                </ItemFooter>
-              )}
-            {inside && (
-              <div
-                role="status"
-                className="bg-background/85 text-primary inset-ring-primary pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 overflow-hidden rounded-[inherit] px-3 py-1 text-xs font-medium inset-ring-2 backdrop-blur-[2px]"
-              >
-                <IndentIncrease
-                  className="size-4 shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="truncate">Make subtask of {task.title}</span>
-              </div>
-            )}
-            {(expanded || receiving) && (
-              <ItemFooter
-                ref={childrenDropRef}
-                id={childrenId}
-                className={cn(
-                  "col-start-1 -col-end-1 min-w-0 basis-full flex-col items-stretch gap-1 pt-1",
-                  depth < 4 && (board ? "pl-4" : "pl-14"),
+                    )}
+                    {(project || tags.length > 0) && (
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
+                        <div className="flex min-w-0 flex-[1_1_100px] items-center gap-0.75">
+                          {project && (
+                            <span
+                              className="max-w-[40%] min-w-0 flex-[0_1_auto] truncate"
+                              title={project.name}
+                            >
+                              {project.name}
+                            </span>
+                          )}
+                          {tags.slice(0, 2).map((tag) => (
+                            <Link
+                              key={tag.id}
+                              href={workspaceHref({
+                                view: "tags",
+                                selectedId: tag.id,
+                              })}
+                              {...taskInteractionBoundary}
+                              className={cn(metadataClass, "min-w-0 shrink")}
+                            >
+                              <TagBadge tag={tag} compact />
+                            </Link>
+                          ))}
+                          {tags.length > 2 && (
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              className="px-0.75 text-[11px] font-normal"
+                              aria-label={`Show all ${tags.length} tags for ${task.title}`}
+                              onClick={() => triggerRef.current?.click()}
+                            >
+                              +{tags.length - 2}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {subtasksToggle && (
+                      <div className="flex min-w-0">{subtasksToggle}</div>
+                    )}
+                  </ItemFooter>
                 )}
-              >
-                <TaskListPreview
-                  tasks={children}
-                  location={{
-                    parentRef: reference(task),
-                    projectId: task.projectId,
-                    sectionId: task.sectionId,
-                  }}
+              {inside && (
+                <div
+                  role="status"
+                  className="bg-background/85 text-primary inset-ring-primary pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 overflow-hidden rounded-[inherit] px-3 py-1 text-xs font-medium inset-ring-2 backdrop-blur-[2px]"
                 >
-                  {(item, index) => (
-                    <NestedTaskRow
-                      key={item.id}
-                      task={item}
-                      index={index}
-                      depth={depth + 1}
-                      board={board}
+                  <IndentIncrease
+                    className="size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">Make subtask of {task.title}</span>
+                </div>
+              )}
+              {(children.length > 0 || receiving) && (
+                <CollapsibleContent
+                  render={
+                    <ItemFooter
+                      ref={childrenDropRef}
+                      className={cn(
+                        "col-start-1 -col-end-1 min-w-0 basis-full flex-col items-stretch gap-1 pt-1",
+                        depth < 4 && (board ? "pl-4" : "pl-14"),
+                      )}
                     />
-                  )}
-                </TaskListPreview>
-              </ItemFooter>
-            )}
+                  }
+                >
+                  <TaskListPreview
+                    tasks={children}
+                    location={{
+                      parentRef: reference(task),
+                      projectId: task.projectId,
+                      sectionId: task.sectionId,
+                    }}
+                  >
+                    {(item, index) => (
+                      <NestedTaskRow
+                        key={item.id}
+                        task={item}
+                        index={index}
+                        depth={depth + 1}
+                        board={board}
+                      />
+                    )}
+                  </TaskListPreview>
+                </CollapsibleContent>
+              )}
+            </Collapsible>
           </Item>
         }
       />
