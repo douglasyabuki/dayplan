@@ -1,8 +1,24 @@
 import type { TagIndex } from "@/lib/tags/hierarchy";
+
+/**
+ * Checks whether any task tag is the selected tag or one of its descendants.
+ * @param ids Tag IDs assigned to a task.
+ * @param selected Selected tag ID.
+ * @param index Precomputed tag hierarchy index.
+ * @returns {boolean} `true` if any ID in `ids` is `selected` or a descendant of it in `index`; otherwise `false`.
+ * @example `matchesTag(["child"], "parent", index)` returns `true` when `child` descends from `parent`.
+ */
 export function matchesTag(ids: string[], selected: string, index: TagIndex) {
   return ids.some((id) => index.contains(selected, id));
 }
 
+/**
+ * Counts open, unarchived tasks for each tag, including their ancestor tags.
+ * @param tasks Tasks with tag IDs and completion/archive state.
+ * @param index Precomputed tag hierarchy index.
+ * @returns {Map<string, number>} A map from tag ID to the count of open, unarchived tasks carrying that tag or a descendant tag. Each task contributes at most once per tag; IDs with zero matches are absent.
+ * @example `tagCounts([{ tagIds: ["child"], completed: false, archived: false }], index)` counts the task for `child` and its ancestors.
+ */
 export function tagCounts(
   tasks: { tagIds: string[]; completed: boolean; archived: boolean }[],
   index: TagIndex,

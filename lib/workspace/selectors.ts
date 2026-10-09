@@ -5,19 +5,19 @@ import { priorities } from "@/types-and-constants/tasks";
 import { type Occurrence } from "@/types-and-constants/tasks";
 import { type Workspace } from "@/types-and-constants/workspace";
 
-/**
- * Searches a task's title, description, project, and tag names.
- * @param task Task occurrence to search.
- * @param state Workspace supplying project and tag names.
- * @param query Search text; matching is case-insensitive and trimmed.
- * @returns Whether any searchable task text contains the query.
- * @example `matchesSearch(task, state, "proposal")` returns `true` when a searchable field contains it.
- */
 const searchCaches = new WeakMap<
   Workspace["tags"],
   WeakMap<Workspace["projects"], WeakMap<Occurrence, string>>
 >();
 
+/**
+ * Searches a task's title, description, project, and tag names.
+ * @param task Task occurrence to search.
+ * @param state Workspace supplying project and tag names.
+ * @param query Search text; matching is case-insensitive and trimmed.
+ * @returns {boolean} `true` when the trimmed, lowercased query is empty or occurs in the lowercased title, description, project name, or any assigned tag path; otherwise `false`.
+ * @example `matchesSearch(task, state, "proposal")` returns `true` when a searchable field contains it.
+ */
 export function matchesSearch(
   task: Occurrence,
   state: Pick<Workspace, "tags" | "projects">,
@@ -52,7 +52,7 @@ export function matchesSearch(
  * @param id Optional selected project or tag ID, depending on the view.
  * @param params URL search parameters containing filters and sort settings.
  * @param today Current date key used for relative-date filters.
- * @returns Matching task occurrences in the requested order.
+ * @returns {Occurrence[]} A new array containing only occurrences that pass the view, status, project, tag, date, priority, schedule, deadline, and text filters, sorted by the selected `sort` parameter (`manual` order by default).
  * @example `selectTasks(tasks, state, "inbox", undefined, new URLSearchParams(), "2026-10-01")` returns open inbox tasks by default.
  */
 export function selectTasks(

@@ -12,7 +12,14 @@ import {
   resolveOccurrence,
 } from "./recurrence";
 
-/** Nest only over a narrow title band; the remaining card area reorders. */
+/**
+ * Chooses whether a pointer is before, after, or inside a task title region.
+ * @param point Pointer coordinates.
+ * @param title Task title bounds.
+ * @param retainInside Whether to keep an existing inside intent across small movements.
+ * @returns {"before" | "after" | "inside"} `"inside"` when `x` is from `title.left` through `title.left + min(title.width, 240)` and vertical distance from the midpoint is at most `min(6, title.height * 0.15)`, or (when `retainInside`) at most `max(entryBand, min(14, title.height * 0.75))`; otherwise `"before"` above the midpoint or `"after"` below it.
+ * @example `taskPointerIntent(point, title)` returns `"inside"` when the pointer is in the title's narrow center band.
+ */
 export function taskPointerIntent(
   point: { x: number; y: number },
   title: { left: number; top: number; width: number; height: number },
@@ -36,6 +43,15 @@ export function taskPointerIntent(
   return point.y < middle ? "before" : "after";
 }
 
+/**
+ * Inserts a source ID around a target ID in an ordered ID list.
+ * @param ids Current ordered IDs.
+ * @param sourceId ID being moved.
+ * @param targetId Optional target ID; omitted appends the source.
+ * @param after Whether to insert after the target instead of before it.
+ * @returns {{ ids: string[]; beforeId: string | undefined; index: number } | null} `null` when source and target match, the target is missing, or the resulting order is unchanged; otherwise the new full `ids` order, the following item's ID as `beforeId` (or `undefined` when appended), and the source's new `index`.
+ * @example `insertion(["a", "b"], "b", "a")` returns the order `["b", "a"]`.
+ */
 export function insertion(
   ids: string[],
   sourceId: string,
@@ -67,7 +83,13 @@ export type DragDestination = {
   statusOnly?: boolean;
 };
 
-/** Reorder mounted siblings only; changing parents during a drag unregisters its source. */
+/**
+ * Applies a drag destination order to mounted sibling items.
+ * @param items Mounted sibling items with IDs.
+ * @param destination Proposed drag destination, if any.
+ * @returns {T[]} The original `items` array when there is no destination, the intent is `inside`, destination length differs from `items.length`, or an ID is unknown; otherwise a new array mapped from `destination.ids` to matching item objects (including repeated IDs if supplied).
+ * @example `previewOrder(items, destination)` shows a same-list reorder before it is persisted.
+ */
 export function previewOrder<T extends { id: string }>(
   items: T[],
   destination: DragDestination | null,
@@ -83,7 +105,15 @@ export function previewOrder<T extends { id: string }>(
   return destination.ids.map((id) => byId.get(id)!);
 }
 
-/** Incoming cards are presentation-only, so the active sortable stays mounted. */
+/**
+ * Builds a display list that previews an incoming task without unmounting its source.
+ * @param items Visible destination occurrences.
+ * @param source Dragged occurrence, when available.
+ * @param destination Proposed destination.
+ * @param location Optional explicit parent and location of the destination list.
+ * @returns {Array<{ task: Occurrence; preview: boolean }>} Entries for the visible list; `preview` is `true` only for an inserted incoming source, and is `false` for every ordinary visible occurrence.
+ * @example `taskPreviewEntries(items, draggedTask, destination)` inserts a presentation-only preview row.
+ */
 export function taskPreviewEntries(
   items: Occurrence[],
   source: Occurrence | undefined,
@@ -139,6 +169,25 @@ export function taskPreviewEntries(
   entries.splice(index, 0, { task: source, preview: true });
   return entries;
 }
+
+/**
+ * Resolves drag metadata into a validated section or task destination.
+ * @param sourceData Metadata for the dragged item.
+ * @param data Metadata for the current drop target.
+ * @param after Whether the source is positioned after the target.
+ * @param intent Pointer intent relative to a task target.
+ * @param manual Whether manual task ordering is enabled.
+ * @param sections Sections available in the workspace.
+ * @param projectId Current project location.
+ * @param allTasks All task occurrences available for resolving the move.
+ * @param visible Currently visible task occurrences.
+ * @param groups Optional grouped occurrences supplied by the current view.
+ * @param canceled Whether the drag was canceled.
+ * @param previous Previous destination retained during pointer movement.
+ * @param state Current workspace state.
+ * @returns {DragDestination | null} `null` for canceled, invalid, cyclic, stale, or unchanged drops; otherwise a destination with `kind`, ordered `ids`, and the applicable target, parent, project, section, completion, and status-only fields.
+ * @example `dragDestination({ ...input })` returns a section reorder or task move destination for a valid drop.
+ */
 export function dragDestination({
   sourceData,
   data,

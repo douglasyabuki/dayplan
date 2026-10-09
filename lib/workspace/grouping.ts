@@ -1,6 +1,7 @@
 import { addDays } from "@/lib/dates";
 import { type Occurrence } from "@/types-and-constants/tasks";
 import { type Workspace } from "@/types-and-constants/workspace";
+
 /**
  * Groups selected tasks by the requested grouping, or by a view-specific default.
  * @param tasks Task occurrences to group.
@@ -8,7 +9,7 @@ import { type Workspace } from "@/types-and-constants/workspace";
  * @param view Current view key, used to choose the default grouping.
  * @param params URL parameters including `group` and upcoming range settings.
  * @param today Current date key for relative groups.
- * @returns Ordered `[group label, tasks]` pairs.
+ * @returns {[string, Occurrence[]][]} `[label, occurrences]` tuples. Each label is a group name or date and its array contains the matching task occurrences. `upcoming`, `schedule`, and `deadline` groups sort by label; `today` puts `Overdue` first; other groupings preserve first-seen order.
  * @example `groupTasks(tasks, state, "today", new URLSearchParams(), "2026-10-01")` groups tasks into overdue and today's focus.
  */
 export function groupTasks(

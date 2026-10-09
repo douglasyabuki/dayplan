@@ -2,9 +2,10 @@ import { addDays, dateKey } from "@/lib/dates";
 import { newTask } from "@/lib/tasks/factory";
 import type { Task } from "@/types-and-constants/tasks";
 import type { Workspace } from "@/types-and-constants/workspace";
+
 /**
  * Creates a sample workspace with sections, subtasks, priorities, tags, and dates.
- * @returns A fresh workspace whose sample dates are relative to today.
+ * @returns {Workspace} A new object with `version: 2`, seeded `sections`, `projects`, `tags`, and `tasks`, empty `layouts` and `exceptions`, the resolved local `timezone`, and `theme: "system"`; sample date fields are based on the current date.
  * @example `seedWorkspace()` returns a workspace with Studio, Website refresh, and Personal projects.
  */
 export function seedWorkspace(): Workspace {

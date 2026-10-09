@@ -21,6 +21,7 @@ import {
   type TaskReference,
 } from "@/types-and-constants/tasks";
 import { type Workspace } from "@/types-and-constants/workspace";
+
 type TaskState = Pick<Workspace, "tasks" | "sections" | "exceptions">;
 
 export type TaskMutation =
@@ -47,6 +48,15 @@ export type TaskMutation =
       beforeId?: string;
     }
   | { type: "reorderTasks"; tasks: Occurrence[]; ids: string[] };
+
+/**
+ * Applies task field changes to a template or to one recurrence exception.
+ * @param state Current task state.
+ * @param ref Task reference to patch.
+ * @param changes Fields to apply; `undefined` clears an exception override.
+ * @returns {T} The same state object when `ref.taskId` is missing; otherwise a shallow state copy with either the normalized task replaced in `tasks` (and incomplete ancestors reopened) or the occurrence exception stored at `referenceKey(ref)` with merged `overrides` and updated `cleared` fields.
+ * @example `patchReference(state, { taskId: "task-1" }, { title: "Updated" })` changes the task title.
+ */
 export function patchReference<T extends TaskState>(
   state: T,
   ref: TaskReference,
@@ -85,6 +95,13 @@ export function patchReference<T extends TaskState>(
   };
 }
 
+/**
+ * Collects an occurrence and its context-inherited descendants.
+ * @param state Workspace task and exception data.
+ * @param task Root occurrence to traverse.
+ * @returns {Occurrence[]} `task` and every resolvable descendant occurrence attached through the same recurrence context or an exception `parentRef`; each occurrence appears at most once.
+ * @example `contextSubtree(state, occurrence)` returns the occurrence and its inherited child tree.
+ */
 function contextSubtree(
   state: Pick<Workspace, "tasks" | "exceptions">,
   task: Occurrence,
@@ -122,6 +139,15 @@ function contextSubtree(
   return result;
 }
 
+/**
+ * Completes a task subtree or reopens the task and its occurrence ancestors.
+ * @param state Current task state.
+ * @param ref Task occurrence reference to update.
+ * @param completed Desired completion state.
+ * @param today Current date key used when resolving recurrence candidates.
+ * @returns {T} The original state when `ref` cannot be resolved; otherwise updated state. With `completed: false`, the referenced occurrence and each resolvable occurrence ancestor are patched to `completed: false`. With `completed: true`, the occurrence context subtree is completed and eligible template descendants are completed when their due, schedule, or occurrence date is on or before the cutoff (`ref.context.occurrenceDate` or `today`).
+ * @example `completeTask(state, ref, true, "2026-10-01")` completes the occurrence and its eligible descendants.
+ */
 export function completeTask<T extends TaskState>(
   state: T,
   ref: TaskReference,
@@ -173,7 +199,16 @@ export function completeTask<T extends TaskState>(
   return next;
 }
 
-/** Detach only this context; independent recurrence roots are never copied. */
+/**
+ * Copies an occurrence subtree into ordinary tasks and marks its source context deleted.
+ * @param state Current task state.
+ * @param task Occurrence subtree root to detach.
+ * @param projectId Project for the new root task, or `null` for the inbox.
+ * @param sectionId Section for the new root task.
+ * @param makeId ID generator used for each copied task.
+ * @returns {{ state: T; root: Task }} `state` has ordinary task copies appended and source-context exceptions marked deleted; `root` is the copied root task with the supplied project and section. Each copied task receives a generated ID and has recurrence cleared.
+ * @example `materializeSubtree(state, occurrence, null, null)` detaches that occurrence into inbox tasks.
+ */
 export function materializeSubtree<T extends TaskState>(
   state: T,
   task: Occurrence,
@@ -212,6 +247,13 @@ export function materializeSubtree<T extends TaskState>(
   };
 }
 
+/**
+ * Moves a task occurrence, materializing it when a recurrence context must be detached.
+ * @param state Current task state.
+ * @param action Move details including parent, location, and insertion point.
+ * @returns {T} The original state object when the task, requested parent, or hierarchy move is invalid; otherwise state with the occurrence moved, siblings reordered, and any required recurrence context materialized.
+ * @example `move(state, { type: "moveTask", task, sectionId: null, projectId: null })` moves a task to the inbox.
+ */
 function move<T extends TaskState>(
   state: T,
   action: Extract<TaskMutation, { type: "moveTask" }>,
@@ -319,6 +361,14 @@ function move<T extends TaskState>(
     next = completeTask(next, reference(parent), false, dateKey());
   return next;
 }
+
+/**
+ * Applies one task mutation to workspace task state.
+ * @param state Current task state.
+ * @param action Mutation describing the task operation.
+ * @returns {T} State after applying the selected `TaskMutation` case (`save`, `patch`, `occurrence`, `complete`, `delete`, `deleteOccurrence`, `archive`, `moveTask`, `reorder`, or `reorderTasks`). Branches that detect missing or invalid inputs may return the original state object; other cases return a shallow state copy or a patched state.
+ * @example `applyTaskMutation(state, { type: "archive", id: "task-1", archived: true })` archives a task.
+ */
 export function applyTaskMutation<T extends TaskState>(
   state: T,
   action: TaskMutation,

@@ -1,4 +1,11 @@
 import type { Occurrence, Task } from "@/types-and-constants/tasks";
+
+/**
+ * Validates editable task fields and returns the first user-facing error.
+ * @param draft Task draft to validate.
+ * @returns {string | undefined} `undefined` when all fields are valid; otherwise the first validation message: `"Give this task a title."`, `"Choose a valid date."`, `"Choose a valid time."`, `"Duration must be between 15 and 1440 minutes."`, `"Add a scheduled date or deadline before setting a repeat rule."`, `"Choose at least one weekday."`, or `"The repeat end date must be on or after the first occurrence."`.
+ * @example `validateTaskDraft(draft)` returns a message when the title is blank.
+ */
 export function validateTaskDraft(draft: Task): string | undefined {
   if (!draft.title.trim()) return "Give this task a title.";
   for (const value of [draft.schedule, draft.deadline]) {
@@ -32,6 +39,12 @@ export function validateTaskDraft(draft: Task): string | undefined {
     return "The repeat end date must be on or after the first occurrence.";
 }
 
+/**
+ * Converts an occurrence into editable task fields while removing occurrence metadata.
+ * @param task Task occurrence to convert.
+ * @returns {Task} The occurrence's fields except `context`; `id` is set to `task.taskId`, and `projectId`/`sectionId` are set to `null` when `parentId` is truthy. For a root task, the occurrence's project and section are preserved.
+ * @example `taskFields(occurrence)` returns the template fields for editing or saving.
+ */
 export function taskFields(task: Occurrence): Task {
   const { taskId, context, ...fields } = task;
   void context;

@@ -1,4 +1,5 @@
 import type { Tag } from "@/types-and-constants/tags";
+
 export type TagIndex = {
   byId: Map<string, Tag>;
   children: Map<string | null, Tag[]>;
@@ -10,7 +11,12 @@ export type TagIndex = {
 
 const indexes = new WeakMap<Tag[], TagIndex>();
 
-/** Shared by all consumers; immutable tag arrays are the cache key. */
+/**
+ * Builds or retrieves the cached hierarchy index for a tag array.
+ * @param tags Tags to index; immutable array identity is used as the cache key.
+ * @returns {TagIndex} `{ byId, children, rows, contains, ancestors, path }`: `byId` maps IDs to tags; `children` maps parent IDs (including `null`) to sibling arrays sorted by `order`; `rows` is a depth-first array of `{ tag, depth }`; `contains(ancestor, id)` is true for the ancestor itself or its descendants; `ancestors(id)` returns the tag and its parent chain, nearest first; and `path(id)` returns names joined with `" / "` (or `""` for an unknown ID). Throws when IDs, parents, or the hierarchy are invalid.
+ * @example `tagIndex(tags).path("child")` returns a slash-separated tag path.
+ */
 export function tagIndex(tags: Tag[]): TagIndex {
   const cached = indexes.get(tags);
   if (cached) return cached;

@@ -12,12 +12,19 @@ export const workspaceViews = [
 ] as const;
 
 export type WorkspaceViewName = (typeof workspaceViews)[number];
+
 export type CollectionKind = "projects" | "tags";
+
 export type WorkspaceRoute =
   | { view: Exclude<WorkspaceViewName, CollectionKind>; selectedId?: never }
   | { view: CollectionKind; selectedId?: string };
 
-/** Resolve only supported workspace paths; Next.js pages own route matching. */
+/**
+ * Resolves a supported workspace pathname into its view and optional collection ID.
+ * @param pathname Pathname to parse, such as `/today` or `/projects/work`.
+ * @returns {WorkspaceRoute | null} `{ view, selectedId }` for a supported path; `selectedId` is present only for `/projects/:id` and `/tags/:id`. Returns `null` for unsupported paths or invalid encoded IDs.
+ * @example `resolveWorkspaceRoute("/projects/work")` returns `{ view: "projects", selectedId: "work" }`.
+ */
 export function resolveWorkspaceRoute(pathname: string): WorkspaceRoute | null {
   const parts = pathname.replace(/\/$/, "").split("/");
   if (parts[0] !== "" || parts.length < 2 || parts.length > 3) return null;
@@ -34,11 +41,24 @@ export function resolveWorkspaceRoute(pathname: string): WorkspaceRoute | null {
   return { view: view as WorkspaceViewName };
 }
 
+/**
+ * Builds the pathname for a workspace view or selected collection.
+ * @param route Route to encode.
+ * @returns {string} `/<view>` when no ID is selected, or `/<view>/<encoded selectedId>` when one is present.
+ * @example `workspaceHref({ view: "projects", selectedId: "work" })` returns `"/projects/work"`.
+ */
 export function workspaceHref(route: WorkspaceRoute): string {
   return `/${route.view}${route.selectedId === undefined ? "" : "/" + encodeURIComponent(route.selectedId)}`;
 }
 
-/** Update specified query keys without discarding unrelated state or mutating the input. */
+/**
+ * Updates selected query parameters while preserving unrelated parameters.
+ * @param pathname Base pathname.
+ * @param params Current URL parameters; this input is not mutated.
+ * @param changes Query keys to set, or delete when the value is `null` or empty.
+ * @returns {string} `pathname` followed by `?` and the serialized updated parameters when any remain; otherwise exactly `pathname`. The input `params` is unchanged.
+ * @example `workspaceQueryHref("/tasks", params, { sort: "title" })` returns a path with the new sort setting.
+ */
 export function workspaceQueryHref(
   pathname: string,
   params: URLSearchParams,
