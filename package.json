@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@dnd-kit/abstract": "0.5.0",
+    "@dnd-kit/collision": "0.5.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/react": "^0.5.0",
     "@playwright/test": "^1.63.0",
