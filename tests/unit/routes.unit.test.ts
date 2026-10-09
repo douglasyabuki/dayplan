@@ -9,7 +9,7 @@ import { afterAll, test } from "vitest";
 
 const directory = mkdtempSync(join(tmpdir(), "dayplan-routes-"));
 const source = readFileSync(
-  new URL("../lib/tasks/routes.ts", import.meta.url),
+  new URL("../../lib/tasks/routes.ts", import.meta.url),
   "utf8",
 );
 writeFileSync(

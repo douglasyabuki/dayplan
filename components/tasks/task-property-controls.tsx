@@ -38,6 +38,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { dateKey, formatDate, parseDay, timeLabel } from "@/lib/tasks/dates";
 import { deadlineLabel, scheduleLabel } from "@/lib/tasks/presentation";
+import { tagIndex } from "@/lib/tasks/tags";
 import {
   type DateValue,
   type Occurrence,
@@ -475,25 +476,50 @@ export function TaskTagsPicker({
   patch,
   state,
 }: DraftControl & { state: Workspace }) {
+  const [query, setQuery] = useState("");
+  const index = tagIndex(state.tags);
+  const options = index.rows.filter(({ tag }) =>
+    index.path(tag.id).toLowerCase().includes(query.toLowerCase().trim()),
+  );
   return (
     <FieldSet className="min-w-0 gap-2">
       <FieldLegend variant="label">Tags</FieldLegend>
+      <Input
+        aria-label="Search tags"
+        placeholder="Search tags and paths"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+      <p className="text-muted-foreground text-xs">
+        Select direct assignments. Parent filters include subtags automatically.
+      </p>
       {state.tags.length ? (
         <ToggleGroup
           aria-label="Task tags"
           multiple
           value={draft.tagIds}
-          onValueChange={(values) => patch({ tagIds: values })}
+          onValueChange={(values) => {
+            const shown = new Set(options.map(({ tag }) => tag.id));
+            patch({
+              tagIds: [
+                ...new Set([
+                  ...draft.tagIds.filter((id) => !shown.has(id)),
+                  ...values,
+                ]),
+              ],
+            });
+          }}
           variant="outline"
           size="sm"
           className="w-full flex-wrap"
         >
-          {state.tags.map((tag) => {
+          {options.map(({ tag }) => {
             const selected = draft.tagIds.includes(tag.id);
             return (
               <ToggleGroupItem
                 key={tag.id}
                 value={tag.id}
+                title={index.path(tag.id)}
                 className={cn(
                   "rounded-4xl",
                   !selected && "text-muted-foreground",
@@ -509,7 +535,7 @@ export function TaskTagsPicker({
                   data-color={tag.color}
                   aria-hidden="true"
                 />
-                {tag.name}
+                <span className="truncate">{index.path(tag.id)}</span>
               </ToggleGroupItem>
             );
           })}

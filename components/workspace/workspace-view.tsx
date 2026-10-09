@@ -70,6 +70,7 @@ export function WorkspaceView({
   const {
     selectedId,
     state,
+    tags,
     view,
     params,
     filtersOpen,
@@ -326,17 +327,19 @@ export function WorkspaceView({
                   ])}
                 />
                 <FilterSelect
-                  label="Tag"
+                  label="Tag (includes subtags)"
                   value={params.get("tag") ?? ""}
                   onChange={(v) => setParams({ tag: v })}
                   allIcon={Tags}
                   optionIcon={Tag}
                   colorType="entity"
-                  options={state.tags.map((t): [string, string, string] => [
-                    t.id,
-                    t.name,
-                    t.color,
-                  ])}
+                  options={tags.rows.map(
+                    ({ tag: t }): [string, string, string] => [
+                      t.id,
+                      tags.path(t.id),
+                      t.color,
+                    ],
+                  )}
                 />
                 <FilterSelect
                   label="Priority"

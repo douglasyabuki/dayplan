@@ -38,7 +38,9 @@ type Context = {
   dismissNotice: () => void;
   cancelConfirmation: () => void;
   acceptConfirmation: () => void;
-  act: (action: Action, message?: string) => void;
+  act: (action: Action, message?: string) => boolean;
+  operationError: string;
+  dismissOperationError: () => void;
   operate: (operation: TaskOperation, message?: string) => void;
   save: (task: Occurrence, message?: string) => void;
   toggle: (task: Occurrence) => void;
@@ -60,6 +62,12 @@ const initial: Workspace = {
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial);
+  const current = useRef(initial);
+  const [operationError, setOperationError] = useState("");
+  function commit(next: Workspace) {
+    current.current = next;
+    dispatch({ type: "replace", state: next });
+  }
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const writable = useRef(false);
@@ -73,7 +81,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const restored = readWorkspace() ?? seedWorkspace();
-      dispatch({ type: "replace", state: restored });
+      commit(restored);
       writable.current = true;
     } catch (cause) {
       // Browser storage is an external system; surface its hydration failure before enabling writes.
@@ -83,7 +91,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           ? cause.message
           : "Storage is unavailable. Changes will stay in this session.",
       );
-      dispatch({ type: "replace", state: seedWorkspace() });
+      commit(seedWorkspace());
     }
     setReady(true);
   }, []);
@@ -126,9 +134,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [notice]);
   function act(action: Action, message?: string) {
-    action = taskAction(state, action);
-    if (message) setNotice({ message, before: state });
-    dispatch(action);
+    try {
+      const before = current.current;
+      const next = reducer(before, taskAction(before, action));
+      setOperationError("");
+      if (next === before) return true;
+      if (message) setNotice({ message, before });
+      commit(next);
+      return true;
+    } catch (cause) {
+      setOperationError(
+        cause instanceof Error ? cause.message : "Unable to apply this change.",
+      );
+      return false;
+    }
   }
   function operate(operation: TaskOperation, message?: string) {
     act(taskOperationAction(state, operation), message);
@@ -158,7 +177,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           writeWorkspace(fresh);
           writable.current = true;
           setError("");
-          dispatch({ type: "replace", state: fresh });
+          commit(fresh);
           setNotice(null);
         } catch {
           setError("Storage is still unavailable. Reset was not saved.");
@@ -170,6 +189,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     <TaskContext.Provider
       value={{
         state,
+        operationError,
+        dismissOperationError: () => setOperationError(""),
         today,
         storageError: !!error,
         ready: ready && !!today,
@@ -178,7 +199,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         confirmation,
         undo: () => {
           if (!notice) return;
-          dispatch({ type: "replace", state: notice.before });
+          commit(notice.before);
+          setOperationError("");
           setNotice(null);
         },
         dismissNotice: () => setNotice(null),

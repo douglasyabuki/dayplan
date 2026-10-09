@@ -17,6 +17,7 @@ import { formatDate } from "@/lib/tasks/dates";
 export function WorkspaceHeader() {
   const {
     title,
+    tags,
     description,
     selectedEntity,
     view,
@@ -101,10 +102,14 @@ export function WorkspaceHeader() {
                 {selectedEntity && (
                   <DropdownMenuItem
                     onClick={() =>
-                      setEntity({
-                        kind: view as "projects" | "tags",
-                        entity: selectedEntity,
-                      })
+                      setEntity(
+                        view === "tags"
+                          ? {
+                              kind: "tags",
+                              entity: tags.byId.get(selectedEntity.id),
+                            }
+                          : { kind: "projects", entity: selectedEntity },
+                      )
                     }
                   >
                     <Pencil />
@@ -117,9 +122,11 @@ export function WorkspaceHeader() {
         </div>
       </div>
       <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-        {selectedEntity
-          ? "One step at a time. Keep things moving."
-          : description}
+        {selectedEntity && view === "tags"
+          ? `${tags.path(selectedEntity.id)}${tags.children.get(selectedEntity.id)?.length ? " · Includes subtags" : ""}`
+          : selectedEntity
+            ? "One step at a time. Keep things moving."
+            : description}
       </p>
       {view === "today" && (
         <div className="text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">

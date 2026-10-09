@@ -19,6 +19,7 @@ import {
   type QuickActionKind,
   TaskQuickActionPopover,
 } from "@/components/tasks/task-quick-actions";
+import { useTagExpansion } from "@/contexts/tag-expansion";
 import { useWorkspace } from "@/contexts/workspace";
 import { addDays, parseDay } from "@/lib/tasks/dates";
 import {
@@ -43,7 +44,9 @@ import {
 } from "@/lib/tasks/routes";
 import { newTask } from "@/lib/tasks/seed";
 import { groupTasks, selectTasks } from "@/lib/tasks/selectors";
+import { tagCounts, tagIndex } from "@/lib/tasks/tags";
 import {
+  type CollectionDialogState,
   containerKey,
   type Occurrence,
   type Project,
@@ -130,10 +133,12 @@ function useControllerState() {
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [settings, setSettings] = useState(false);
-  const [entity, setEntity] = useState<{
-    kind: "projects" | "tags";
-    entity?: Project;
-  } | null>(null);
+  const [entity, setEntity] = useState<CollectionDialogState | null>(null);
+  const tags = tagIndex(state.tags);
+  const tagExpansion = useTagExpansion(
+    tags,
+    view === "tags" ? selectedId : undefined,
+  );
   const [sectionDialog, setSectionDialog] = useState<{
     section?: Section;
     mode?: "rename" | "delete";
@@ -184,7 +189,19 @@ function useControllerState() {
     () => expandTasks(state, from, to),
     [state, from, to],
   );
-  const matches = selectTasks(allTasks, state, view, selectedId, params, today);
+  const countsByTag = useMemo(
+    () => tagCounts(allTasks, tags),
+    [allTasks, tags],
+  );
+  const searchMetadata = useMemo(
+    () => ({ tags: state.tags, projects: state.projects }),
+    [state.tags, state.projects],
+  );
+  const matches = useMemo(
+    () =>
+      selectTasks(allTasks, searchMetadata, view, selectedId, params, today),
+    [allTasks, searchMetadata, view, selectedId, params, today],
+  );
   const hierarchyView = ["inbox", "projects", "tasks"].includes(view);
   const included = new Map(matches.map((t) => [t.id, t]));
   if (hierarchyView)
@@ -599,7 +616,11 @@ function useControllerState() {
     ),
     add: () => create(),
     manage: (kind: "projects" | "tags", item?: Project) =>
-      setEntity({ kind, entity: item }),
+      setEntity(
+        kind === "tags"
+          ? { kind, entity: item ? tags.byId.get(item.id) : undefined }
+          : { kind, entity: item },
+      ),
   };
   const completedToday = allTasks.filter(
     (t) =>
@@ -635,6 +656,9 @@ function useControllerState() {
       if (id) setQuickAction(null);
     },
     state,
+    tags,
+    countsByTag,
+    tagExpansion,
     today,
     dragDestination,
     statusGrouping,

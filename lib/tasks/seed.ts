@@ -334,10 +334,34 @@ export function seedWorkspace(): Workspace {
       { id: "personal", name: "Personal", color: "amber" },
     ],
     tags: [
-      { id: "focus", name: "Deep work", color: "violet" },
-      { id: "quick", name: "Quick win", color: "emerald" },
-      { id: "writing", name: "Writing", color: "sky" },
-      { id: "someday", name: "Someday", color: "amber" },
+      {
+        id: "focus",
+        name: "Deep work",
+        color: "violet",
+        parentId: null,
+        order: 0,
+      },
+      {
+        id: "quick",
+        name: "Quick win",
+        color: "emerald",
+        parentId: null,
+        order: 1,
+      },
+      {
+        id: "writing",
+        name: "Writing",
+        color: "sky",
+        parentId: null,
+        order: 2,
+      },
+      {
+        id: "someday",
+        name: "Someday",
+        color: "amber",
+        parentId: null,
+        order: 3,
+      },
     ],
     tasks: entries.flatMap(({ children = [], ...entry }, index) => {
       const parent = { ...newTask(), ...entry, order: index };

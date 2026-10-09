@@ -1,13 +1,28 @@
 "use client";
 
-import { ArrowRight, FolderOpen, Plus, Tag } from "lucide-react";
+import { ArrowRight, FolderOpen, Plus } from "lucide-react";
 import Link from "next/link";
 
+import { TagTree } from "@/components/collections/tag-tree";
+import { Button } from "@/components/ui/button";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { type CollectionKind, workspaceHref } from "@/lib/tasks/routes";
 
 export function WorkspaceCollectionView({ kind }: { kind: CollectionKind }) {
   const { state, setEntity } = useWorkspaceController();
+  if (kind === "tags")
+    return (
+      <div className="flex max-w-3xl flex-col gap-4">
+        <p className="text-muted-foreground text-sm">
+          Organize tags and subtags. Counts include open tasks in all subtags.
+        </p>
+        <TagTree label="Manage tags" />
+        <Button variant="outline" onClick={() => setEntity({ kind: "tags" })}>
+          <Plus data-icon="inline-start" />
+          Create tag
+        </Button>
+      </div>
+    );
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {state[kind].map((item) => (
@@ -20,18 +35,13 @@ export function WorkspaceCollectionView({ kind }: { kind: CollectionKind }) {
             className="flex size-9 items-center justify-center rounded-lg text-(--entity-color) [background:color-mix(in_oklch,var(--entity-color)_10%,transparent)] [&_svg]:size-4"
             data-color={item.color}
           >
-            {kind === "projects" ? <FolderOpen /> : <Tag />}
+            <FolderOpen />
           </span>
           <h2>{item.name}</h2>
           <p>
             {
               state.tasks.filter(
-                (t) =>
-                  !t.archived &&
-                  !t.completed &&
-                  (kind === "projects"
-                    ? t.projectId === item.id
-                    : t.tagIds.includes(item.id)),
+                (t) => !t.archived && !t.completed && t.projectId === item.id,
               ).length
             }{" "}
             open tasks

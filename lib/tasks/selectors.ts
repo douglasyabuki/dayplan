@@ -1,4 +1,5 @@
 import { addDays } from "./dates";
+import { matchesTag, tagIndex } from "./tags";
 import { type Occurrence, priorities, type Workspace } from "./types";
 
 /**
@@ -9,20 +10,35 @@ import { type Occurrence, priorities, type Workspace } from "./types";
  * @returns Whether any searchable task text contains the query.
  * @example `matchesSearch(task, state, "proposal")` returns `true` when a searchable field contains it.
  */
+const searchCaches = new WeakMap<
+  Workspace["tags"],
+  WeakMap<Workspace["projects"], WeakMap<Occurrence, string>>
+>();
+
 export function matchesSearch(
   task: Occurrence,
-  state: Workspace,
+  state: Pick<Workspace, "tags" | "projects">,
   query: string,
 ) {
-  return [
-    task.title,
-    task.description,
-    state.projects.find((p) => p.id === task.projectId)?.name,
-    ...state.tags.filter((t) => task.tagIds.includes(t.id)).map((t) => t.name),
-  ]
-    .join(" ")
-    .toLowerCase()
-    .includes(query.toLowerCase().trim());
+  if (!query.trim()) return true;
+  let projects = searchCaches.get(state.tags);
+  if (!projects) searchCaches.set(state.tags, (projects = new WeakMap()));
+  let tasks = projects.get(state.projects);
+  if (!tasks) projects.set(state.projects, (tasks = new WeakMap()));
+  let text = tasks.get(task);
+  if (text === undefined) {
+    const index = tagIndex(state.tags);
+    text = [
+      task.title,
+      task.description,
+      state.projects.find((p) => p.id === task.projectId)?.name,
+      ...task.tagIds.map((id) => index.path(id)),
+    ]
+      .join(" ")
+      .toLowerCase();
+    tasks.set(task, text);
+  }
+  return text.includes(query.toLowerCase().trim());
 }
 
 /**
@@ -38,12 +54,13 @@ export function matchesSearch(
  */
 export function selectTasks(
   tasks: Occurrence[],
-  state: Workspace,
+  state: Pick<Workspace, "tags" | "projects">,
   view: string,
   id: string | undefined,
   params: URLSearchParams,
   today: string,
 ): Occurrence[] {
+  const index = tagIndex(state.tags);
   const result = tasks.filter((task) => {
     if (view === "archive" ? !task.archived : task.archived) return false;
     const status =
@@ -62,7 +79,7 @@ export function selectTasks(
     if (view === "inbox" && task.projectId !== null) return false;
     if (
       (view === "projects" && id && task.projectId !== id) ||
-      (view === "tags" && id && !task.tagIds.includes(id))
+      (view === "tags" && id && !matchesTag(task.tagIds, id, index))
     )
       return false;
     if (
@@ -87,7 +104,10 @@ export function selectTasks(
     }
     if (params.get("project") && task.projectId !== params.get("project"))
       return false;
-    if (params.get("tag") && !task.tagIds.includes(params.get("tag")!))
+    if (
+      params.get("tag") &&
+      !matchesTag(task.tagIds, params.get("tag")!, index)
+    )
       return false;
     if (params.get("priority") && task.priority !== params.get("priority"))
       return false;

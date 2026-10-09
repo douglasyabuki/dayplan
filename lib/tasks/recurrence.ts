@@ -150,11 +150,24 @@ export function occurrenceParent(
       : null;
   return parentRoot ? null : { taskId: task.parentId };
 }
+const expansionCache = new WeakMap<
+  Workspace["tasks"],
+  WeakMap<
+    Workspace["exceptions"],
+    { from: string; to: string; result: Occurrence[] }
+  >
+>();
+
 export function expandTasks(
   state: Workspace,
   from: string,
   to: string,
 ): Occurrence[] {
+  let exceptions = expansionCache.get(state.tasks);
+  if (!exceptions)
+    expansionCache.set(state.tasks, (exceptions = new WeakMap()));
+  const cached = exceptions.get(state.exceptions);
+  if (cached?.from === from && cached.to === to) return cached.result;
   const result = new Map<string, Occurrence>();
   for (const task of state.tasks) {
     const root = recurrenceRoot(state, task.id);
@@ -185,7 +198,9 @@ export function expandTasks(
     const resolved = resolveOccurrence(state, exception);
     if (resolved) result.set(resolved.id, resolved);
   }
-  return [...result.values()];
+  const expanded = [...result.values()];
+  exceptions.set(state.exceptions, { from, to, result: expanded });
+  return expanded;
 }
 export function occurrenceChildren(
   state: Workspace,

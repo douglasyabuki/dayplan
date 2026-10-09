@@ -12,7 +12,11 @@ export type RecurrenceRule = {
 
 export type Project = { id: string; name: string; color: string };
 
-export type Tag = Project;
+export type Tag = Project & { parentId: string | null; order: number };
+
+export type CollectionDialogState =
+  | { kind: "projects"; entity?: Project }
+  | { kind: "tags"; entity?: Tag; parentId?: string | null; mode?: "move" };
 
 export type Section = {
   id: string;

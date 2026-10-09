@@ -17,6 +17,8 @@ import { useWorkspace } from "@/contexts/workspace";
 export function WorkspaceFeedback() {
   const {
     error,
+    operationError,
+    dismissOperationError,
     notice,
     confirmation,
     reset,
@@ -28,6 +30,18 @@ export function WorkspaceFeedback() {
 
   return (
     <>
+      {operationError && (
+        <Alert
+          variant="destructive"
+          className="fixed right-4 bottom-36 z-60 max-w-md shadow-lg"
+        >
+          <AlertTitle>Change could not be applied</AlertTitle>
+          <AlertDescription>{operationError}</AlertDescription>
+          <Button variant="outline" onClick={dismissOperationError}>
+            Dismiss
+          </Button>
+        </Alert>
+      )}
       {error && (
         <Alert
           variant="destructive"

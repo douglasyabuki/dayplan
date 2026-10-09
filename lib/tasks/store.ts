@@ -15,11 +15,13 @@ import {
   resolveOccurrence,
   sameContext,
 } from "./recurrence";
+import { deleteTag, moveTag, saveTag, tagIndex } from "./tags";
 import {
   containerKey,
   type Occurrence,
   type Project,
   type Section,
+  type Tag,
   type Task,
   type TaskLayout,
   type TaskReference,
@@ -41,7 +43,9 @@ export type Action =
   | { type: "delete"; id: string }
   | { type: "deleteOccurrence"; ref: TaskReference }
   | { type: "archive"; id: string; archived: boolean }
-  | { type: "entity"; kind: "projects" | "tags"; entity: Project }
+  | { type: "entity"; kind: "projects"; entity: Project }
+  | { type: "entity"; kind: "tags"; entity: Tag }
+  | { type: "moveTag"; id: string; parentId: string | null; beforeId?: string }
   | { type: "deleteEntity"; kind: "projects" | "tags"; id: string }
   | { type: "reorder"; ids: string[] }
   | { type: "theme"; theme: Workspace["theme"] }
@@ -593,7 +597,10 @@ export function reducer(state: Workspace, action: Action): Workspace {
       };
     case "theme":
       return { ...state, theme: action.theme };
+    case "moveTag":
+      return moveTag(state, action.id, action.parentId, action.beforeId);
     case "entity":
+      if (action.kind === "tags") return saveTag(state, action.entity);
       return {
         ...state,
         [action.kind]: state[action.kind].some((e) => e.id === action.entity.id)
@@ -603,6 +610,7 @@ export function reducer(state: Workspace, action: Action): Workspace {
           : [...state[action.kind], action.entity],
       };
     case "deleteEntity": {
+      if (action.kind === "tags") return deleteTag(state, action.id);
       const update = (task: Partial<Task>) =>
         action.kind === "projects"
           ? task.projectId === action.id
@@ -719,6 +727,12 @@ export function readWorkspace(): Workspace | null {
     throw new Error(
       "The saved workspace could not be read. Your stored data has not been changed.",
     );
+  state.tags = state.tags.map((tag, order) => ({
+    ...tag,
+    parentId: tag.parentId === undefined ? null : tag.parentId,
+    order: tag.order === undefined ? order : tag.order,
+  }));
+  tagIndex(state.tags);
   validateHierarchy(state.tasks);
   new Intl.DateTimeFormat("en-US", { timeZone: state.timezone });
   for (const section of state.sections)

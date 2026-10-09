@@ -12,11 +12,11 @@ import {
   Plus,
   Sun,
   Sunrise,
-  Tag,
 } from "lucide-react";
 import Link from "next/link";
 import { useId } from "react";
 
+import { TagTree } from "@/components/collections/tag-tree";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar as BaseSidebar,
@@ -242,41 +242,7 @@ export function WorkspaceSidebar({
                 <Plus />
               </SidebarGroupAction>
               <SidebarGroupContent>
-                <SidebarMenu>
-                  {state.tags.map((tag) => (
-                    <SidebarMenuItem key={tag.id}>
-                      <div className="nav-entity group relative">
-                        <SidebarMenuButton
-                          render={
-                            <Link
-                              href={workspaceHref({
-                                view: "tags",
-                                selectedId: tag.id,
-                              })}
-                              onClick={close}
-                            />
-                          }
-                          isActive={view === "tags" && selectedId === tag.id}
-                          className="min-h-9 rounded-lg px-3 pr-9 text-[13px]"
-                        >
-                          <Tag
-                            className="tag-icon text-(--entity-color) opacity-75"
-                            data-color={tag.color}
-                          />
-                          <span>{tag.name}</span>
-                        </SidebarMenuButton>
-                        <SidebarMenuAction
-                          showOnHover
-                          aria-label={`Edit ${tag.name}`}
-                          title={`Edit ${tag.name}`}
-                          onClick={() => manage("tags", tag)}
-                        >
-                          <MoreHorizontal />
-                        </SidebarMenuAction>
-                      </div>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
+                <TagTree close={close} label="Sidebar tags" />
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
