@@ -450,7 +450,10 @@ function TaskEditorPanel({
                 >
                   <MoreHorizontal />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
+                <DropdownMenuContent
+                  align="start"
+                  className="quick-actions-dropdown"
+                >
                   <DropdownMenuGroup>
                     <DropdownMenuItem
                       disabled={task.archived && !editor.ownArchived}

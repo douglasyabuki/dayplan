@@ -141,6 +141,35 @@
   }
 }
 
+@layer components {
+  .quick-actions-context-menu,
+  .quick-actions-dropdown {
+    width: 14rem !important;
+    max-width: var(--available-width) !important;
+  }
+
+  .quick-actions-context-menu [data-slot="context-menu-item"],
+  .quick-actions-context-menu [data-slot="context-menu-checkbox-item"],
+  .quick-actions-context-menu [data-slot="context-menu-sub-trigger"],
+  .quick-actions-dropdown [data-slot="dropdown-menu-item"],
+  .quick-actions-dropdown [data-slot="dropdown-menu-checkbox-item"],
+  .quick-actions-dropdown [data-slot="dropdown-menu-sub-trigger"] {
+    height: 2rem !important;
+    font-size: 13px !important;
+    line-height: 1rem !important;
+  }
+
+  .quick-actions-context-menu [data-slot="context-menu-item"] > svg,
+  .quick-actions-context-menu [data-slot="context-menu-checkbox-item"] > svg,
+  .quick-actions-context-menu [data-slot="context-menu-sub-trigger"] > svg,
+  .quick-actions-dropdown [data-slot="dropdown-menu-item"] > svg,
+  .quick-actions-dropdown [data-slot="dropdown-menu-checkbox-item"] > svg,
+  .quick-actions-dropdown [data-slot="dropdown-menu-sub-trigger"] > svg {
+    width: 0.875rem !important;
+    height: 0.875rem !important;
+  }
+}
+
 [data-color="indigo"] {
   --entity-color: var(--indigo);
 }

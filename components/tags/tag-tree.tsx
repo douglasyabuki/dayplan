@@ -73,8 +73,6 @@ const tagFeedback = [Feedback.configure({ dropAnimation: null })];
 const tagModifiers = [RestrictToVerticalAxis];
 
 const TAG_COLLISION_INSET_Y = 2;
-const tagDropdownMenuClass =
-  "w-56 max-w-(--available-width) **:data-[slot='dropdown-menu-item']:h-8 **:data-[slot='dropdown-menu-item']:text-[13px] **:data-[slot='dropdown-menu-item']:leading-4 [&_[data-slot='dropdown-menu-item']>svg]:size-3.5";
 const tagRowCollisionDetector: CollisionDetector = ({
   droppable,
   dragOperation,
@@ -542,7 +540,7 @@ function TagRow({
             >
               <MoreHorizontal />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className={tagDropdownMenuClass}>
+            <DropdownMenuContent align="end" className="quick-actions-dropdown">
               <DropdownMenuGroup>
                 <DropdownMenuItem onClick={openEdit}>
                   <Pencil />
@@ -573,7 +571,7 @@ function TagRow({
           </DropdownMenu>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="quick-actions-context-menu">
         <ContextMenuGroup>
           <ContextMenuItem onClick={openEdit}>
             <Pencil />

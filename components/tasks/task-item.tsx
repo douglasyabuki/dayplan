@@ -659,6 +659,7 @@ export function TaskItem({
         }
       />
       <ContextMenuContent
+        className="quick-actions-context-menu"
         {...taskInteractionBoundary}
         finalFocus={() =>
           controller.quickAction

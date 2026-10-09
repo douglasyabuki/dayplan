@@ -64,9 +64,6 @@ import { useWorkspace } from "@/stores/workspace/provider";
 import type { Section } from "@/types-and-constants/sections";
 import type { Occurrence } from "@/types-and-constants/tasks";
 
-const sectionMenuClass =
-  "w-56 **:data-[slot='dropdown-menu-item']:h-8 **:data-[slot='dropdown-menu-item']:text-[13px] **:data-[slot='dropdown-menu-item']:leading-4 **:data-[slot='dropdown-menu-checkbox-item']:h-8 **:data-[slot='dropdown-menu-checkbox-item']:text-[13px] **:data-[slot='dropdown-menu-checkbox-item']:leading-4 **:data-[slot='dropdown-menu-sub-trigger']:h-8 **:data-[slot='dropdown-menu-sub-trigger']:text-[13px] **:data-[slot='dropdown-menu-sub-trigger']:leading-4 [&_[data-slot='dropdown-menu-item']>svg]:size-3.5 [&_[data-slot='dropdown-menu-checkbox-item']>svg]:size-3.5 [&_[data-slot='dropdown-menu-sub-trigger']>svg]:size-3.5";
-
 function useSectionMenuActions(section: Section) {
   const { state, act } = useWorkspace();
   const { setSectionDialog } = useWorkspaceController();
@@ -127,7 +124,7 @@ function SectionActions({ section }: { section: Section }) {
       <DropdownMenuContent
         side="right"
         align="start"
-        className={sectionMenuClass}
+        className="quick-actions-dropdown"
       >
         <DropdownMenuGroup>
           {actions.map(({ label, Icon, onSelect }) => (
@@ -141,7 +138,7 @@ function SectionActions({ section }: { section: Section }) {
               <Folder />
               Move to
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className={sectionMenuClass}>
+            <DropdownMenuSubContent className="quick-actions-dropdown">
               <DropdownMenuGroup>
                 {destinations.map((destination) => (
                   <DropdownMenuCheckboxItem
@@ -217,7 +214,7 @@ function SectionHeaderMenu({
       >
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="quick-actions-context-menu">
         <ContextMenuGroup>
           {actions.map(({ label, Icon, onSelect }) => (
             <ContextMenuItem key={label} onClick={onSelect}>
@@ -230,7 +227,7 @@ function SectionHeaderMenu({
               <Folder />
               Move to
             </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
+            <ContextMenuSubContent className="quick-actions-context-menu">
               <ContextMenuGroup>
                 {destinations.map((destination) => (
                   <ContextMenuCheckboxItem
