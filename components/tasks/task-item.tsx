@@ -668,7 +668,6 @@ export function TaskItem({
                 "[data-task-item][tabindex] .task-title",
               ))
         }
-        className="w-56 **:data-[slot='context-menu-item']:h-8 **:data-[slot='context-menu-item']:text-[13px] **:data-[slot='context-menu-item']:leading-4 [&_[data-slot='context-menu-item']>svg]:size-3.5"
       >
         <ContextMenuGroup>
           <ContextMenuItem onClick={() => onOpen({ triggerId })}>

@@ -17,10 +17,16 @@ import {
   useDroppable,
 } from "@dnd-kit/react";
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronDown,
   ChevronRight,
+  Folder,
   MoreHorizontal,
+  Pencil,
+  Plus,
   Tag as TagIcon,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -402,18 +408,22 @@ function TagRow({
   const actions = [
     {
       label: "Create subtag",
+      Icon: Plus,
       run: () => setEntity({ kind: "tags", parentId: tag.id }),
     },
     {
       label: "Rename/Edit",
+      Icon: Pencil,
       run: () => setEntity({ kind: "tags", entity: tag }),
     },
     {
       label: "Move to",
+      Icon: Folder,
       run: () => setEntity({ kind: "tags", entity: tag, mode: "move" }),
     },
     {
       label: "Move up",
+      Icon: ArrowUp,
       disabled: position === 0,
       run: () =>
         act(
@@ -428,6 +438,7 @@ function TagRow({
     },
     {
       label: "Move down",
+      Icon: ArrowDown,
       disabled: position === siblings.length - 1,
       run: () =>
         act(
@@ -442,6 +453,7 @@ function TagRow({
     },
     {
       label: "Delete",
+      Icon: Trash2,
       run: () =>
         confirm({
           title: `Delete ${tag.name}?`,
@@ -557,6 +569,7 @@ function TagRow({
               disabled={action.disabled}
               onClick={action.run}
             >
+              <action.Icon />
               {action.label}
             </ContextMenuItem>
           ))}

@@ -290,8 +290,6 @@ export function SectionDialog({
 
 const sectionMenuClass =
   "w-56 **:data-[slot='dropdown-menu-item']:h-8 **:data-[slot='dropdown-menu-item']:text-[13px] **:data-[slot='dropdown-menu-item']:leading-4 **:data-[slot='dropdown-menu-checkbox-item']:h-8 **:data-[slot='dropdown-menu-checkbox-item']:text-[13px] **:data-[slot='dropdown-menu-checkbox-item']:leading-4 **:data-[slot='dropdown-menu-sub-trigger']:h-8 **:data-[slot='dropdown-menu-sub-trigger']:text-[13px] **:data-[slot='dropdown-menu-sub-trigger']:leading-4 [&_[data-slot='dropdown-menu-item']>svg]:size-3.5 [&_[data-slot='dropdown-menu-checkbox-item']>svg]:size-3.5 [&_[data-slot='dropdown-menu-sub-trigger']>svg]:size-3.5";
-const sectionContextMenuClass =
-  "w-56 **:data-[slot='context-menu-item']:h-8 **:data-[slot='context-menu-item']:text-[13px] **:data-[slot='context-menu-item']:leading-4 **:data-[slot='context-menu-checkbox-item']:h-8 **:data-[slot='context-menu-checkbox-item']:text-[13px] **:data-[slot='context-menu-checkbox-item']:leading-4 **:data-[slot='context-menu-sub-trigger']:h-8 **:data-[slot='context-menu-sub-trigger']:text-[13px] **:data-[slot='context-menu-sub-trigger']:leading-4 [&_[data-slot='context-menu-item']>svg]:size-3.5 [&_[data-slot='context-menu-checkbox-item']>svg]:size-3.5 [&_[data-slot='context-menu-sub-trigger']>svg]:size-3.5";
 
 function useSectionMenuActions(section: Section) {
   const { state, act } = useWorkspace();
@@ -443,7 +441,7 @@ function SectionHeaderMenu({
       >
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent className={sectionContextMenuClass}>
+      <ContextMenuContent>
         <ContextMenuGroup>
           {actions.map(({ label, Icon, onSelect }) => (
             <ContextMenuItem key={label} onClick={onSelect}>
@@ -456,7 +454,7 @@ function SectionHeaderMenu({
               <Folder />
               Move to
             </ContextMenuSubTrigger>
-            <ContextMenuSubContent className={sectionContextMenuClass}>
+            <ContextMenuSubContent>
               <ContextMenuGroup>
                 {destinations.map((destination) => (
                   <ContextMenuCheckboxItem
