@@ -239,7 +239,7 @@ export function TagTree({
             destination?.parentId === tag.id) && (
             <ul
               aria-label={`${tag.name} subtags`}
-              className="flex min-w-0 flex-col gap-4"
+              className="flex min-w-0 flex-col gap-0.5"
             >
               {renderChildren(tag.id)}
             </ul>
@@ -477,8 +477,8 @@ function TagRow({
               "bg-accent outline-primary outline-2 -outline-offset-2",
           )}
           style={{
-            marginInlineStart: Math.min(depth, 6) * 8,
-            width: `calc(100% - ${Math.min(depth, 6) * 8}px)`,
+            marginInlineStart: Math.min(depth, 6) * 12,
+            width: `calc(100% - ${Math.min(depth, 6) * 12}px)`,
           }}
         >
           {children.length > 0 && (
@@ -495,10 +495,7 @@ function TagRow({
           )}
           <Link
             draggable={false}
-            className={cn(
-              "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-sidebar-ring flex min-h-9 min-w-0 items-center gap-2 rounded-lg px-3 pr-9 outline-none focus-visible:ring-2",
-              children.length > 0 && "pl-6",
-            )}
+            className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-sidebar-ring flex min-h-9 min-w-0 items-center gap-2 rounded-lg px-3 pr-9 outline-none focus-visible:ring-2"
             href={workspaceHref({ view: "tags", selectedId: tag.id })}
             onClick={close}
             title={tags.path(tag.id)}
@@ -573,7 +570,7 @@ function TagRowPreview({
   depth: number;
   count: number;
 }) {
-  const indent = Math.min(depth, 6) * 8;
+  const indent = Math.min(depth, 6) * 12;
   return (
     <div
       data-tag-drop-preview
