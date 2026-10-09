@@ -1,8 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
 
-async function seed(page: Page, board = false, projectCount = 1) {
+async function seed(page: Page, board = false, projectCount = 1, tagCount = 0) {
   await page.addInitScript(
-    ({ board, projectCount }) =>
+    ({ board, projectCount, tagCount }) =>
       localStorage.setItem(
         "dayplan.workspace.v2",
         JSON.stringify({
@@ -28,7 +28,13 @@ async function seed(page: Page, board = false, projectCount = 1) {
             name: `Project ${i}`,
             color: "sky",
           })),
-          tags: [],
+          tags: Array.from({ length: tagCount }, (_, i) => ({
+            id: `tag-${i}`,
+            name: `Tag ${i}`,
+            color: "sky",
+            parentId: i === 1 || i === 2 ? "tag-0" : null,
+            order: i,
+          })),
           sections: [],
           exceptions: {},
           layouts: { inbox: board ? "board" : "list" },
@@ -36,7 +42,7 @@ async function seed(page: Page, board = false, projectCount = 1) {
           theme: "light",
         }),
       ),
-    { board, projectCount },
+    { board, projectCount, tagCount },
   );
   // Match the existing dev server's origin: Next blocks dev assets from other origins.
   await page.goto("http://localhost:3000/inbox");
@@ -95,7 +101,7 @@ test("long project lists still auto-scroll vertically during a drag", async ({
   page,
 }) => {
   await seed(page, false, 30);
-  const content = page.locator('[data-slot="sidebar-content"]');
+  const content = page.getByRole("region", { name: "Projects list" });
   const bounds = (await content.boundingBox())!;
   const source = (await page
     .locator("[data-task-item]")
@@ -119,3 +125,99 @@ test("long project lists still auto-scroll vertically during a drag", async ({
   await page.keyboard.press("Escape");
   await page.mouse.up();
 });
+
+for (const [width, height, projects, tags] of [
+  [1440, 900, 30, 30],
+  [1440, 900, 3, 30],
+  [1440, 900, 4, 30],
+  [1440, 900, 30, 4],
+  [1280, 600, 30, 30],
+  [1024, 480, 30, 30],
+  [844, 390, 30, 30],
+  [390, 844, 30, 30],
+  [320, 568, 30, 30],
+  [1280, 600, 2, 30],
+  [1280, 600, 30, 2],
+  [1280, 600, 0, 0],
+]) {
+  test(`whole sidebar rows at ${width}x${height}, ${projects} projects / ${tags} tags`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height });
+    await seed(page, false, projects, tags);
+    if (width < 768)
+      await page.getByRole("button", { name: "Expand sidebar" }).click();
+
+    const sidebar = page.locator('[data-slot="sidebar-content"]');
+    await expect(sidebar).toBeVisible();
+    await expect(sidebar.getByRole("button", { name: /Add task/ })).toHaveCount(
+      0,
+    );
+    for (const [name, count] of [
+      ["Projects list", projects],
+      ["Tags list", tags],
+    ] as const) {
+      const list = page.getByRole("region", { name });
+      await expect(list).toBeVisible();
+      if (!count) continue;
+      await expect
+        .poll(() => list.evaluate((el) => el.clientHeight))
+        .toBeGreaterThanOrEqual(36);
+      const assertWholeRows = async () => {
+        await expect
+          .poll(() =>
+            list.evaluate((el) => {
+              const viewport = el.getBoundingClientRect();
+              return [...el.querySelectorAll("a")].every((link) => {
+                const row = link.getBoundingClientRect();
+                return (
+                  row.bottom <= viewport.top + 1 ||
+                  row.top >= viewport.bottom - 1 ||
+                  (row.top >= viewport.top - 1 &&
+                    row.bottom <= viewport.bottom + 1)
+                );
+              });
+            }),
+          )
+          .toBe(true);
+      };
+      await assertWholeRows();
+      if (height >= 900) {
+        await expect
+          .poll(() => list.evaluate((el) => el.clientHeight))
+          .toBeGreaterThanOrEqual(Math.min(count, 4) * 36);
+        if (count <= 4)
+          expect(
+            await list.evaluate((el) => el.scrollHeight - el.clientHeight),
+          ).toBe(0);
+      }
+      await list.hover();
+      await page.mouse.wheel(0, 83);
+      await assertWholeRows();
+      await list.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      await assertWholeRows();
+      await expect(list.locator("a").last()).toBeInViewport();
+      expect(await list.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(
+        0,
+      );
+    }
+    await expect(
+      page.getByRole("link", { name: "Completed", exact: true }),
+    ).toBeInViewport();
+    await expect(
+      page.getByRole("link", { name: "Archive", exact: true }),
+    ).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath("sidebar.png") });
+
+    if (width >= 768 && projects > 4 && tags > 4) {
+      const list = page.getByRole("region", { name: "Projects list" });
+      const before = await list.evaluate((el) => el.clientHeight);
+      await page.setViewportSize({ width, height: height + 300 });
+      await expect
+        .poll(() => list.evaluate((el) => el.clientHeight))
+        .toBeGreaterThan(before);
+    }
+  });
+}

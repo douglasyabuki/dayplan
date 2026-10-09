@@ -614,7 +614,6 @@ function useControllerState() {
     tasks: allTasks.filter(
       (t) => !t.context?.occurrenceDate || t.context?.occurrenceDate <= today,
     ),
-    add: () => create(),
     manage: (kind: "projects" | "tags", item?: Project) =>
       setEntity(
         kind === "tags"

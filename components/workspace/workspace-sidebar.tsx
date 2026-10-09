@@ -14,10 +14,9 @@ import {
   Sunrise,
 } from "lucide-react";
 import Link from "next/link";
-import { useId } from "react";
+import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
 
 import { TagTree } from "@/components/collections/tag-tree";
-import { Button } from "@/components/ui/button";
 import {
   Sidebar as BaseSidebar,
   SidebarContent,
@@ -48,14 +47,12 @@ export function WorkspaceSidebar({
   selectedId,
   tasks,
   close,
-  add,
   manage,
 }: {
   view: WorkspaceViewName;
   selectedId?: string;
   tasks: Occurrence[];
   close?: () => void;
-  add: () => void;
   manage: (kind: "projects" | "tags", entity?: Project) => void;
 }) {
   const { state, today } = useWorkspace();
@@ -76,6 +73,48 @@ export function WorkspaceSidebar({
     { id: "tasks", label: "All tasks", icon: Layers3 },
     { id: "calendar", label: "Calendar", icon: CalendarDays },
   ] as const;
+  const projectMenu = (
+    <SidebarMenu>
+      {state.projects.map((project) => (
+        <SidebarMenuItem key={project.id}>
+          <ProjectTarget projectId={project.id}>
+            <div className="nav-entity group relative">
+              <SidebarMenuButton
+                render={
+                  <Link
+                    href={workspaceHref({
+                      view: "projects",
+                      selectedId: project.id,
+                    })}
+                    onClick={close}
+                  />
+                }
+                isActive={view === "projects" && selectedId === project.id}
+                className="min-h-9 rounded-lg px-3 pr-9 text-[13px]"
+              >
+                <Folder
+                  className="size-4 shrink-0 text-(--entity-color)"
+                  data-color={project.color}
+                />
+                <span>{project.name}</span>
+              </SidebarMenuButton>
+              <SidebarMenuBadge className="right-9 text-[11px]">
+                {open.filter((t) => t.projectId === project.id).length || ""}
+              </SidebarMenuBadge>
+              <SidebarMenuAction
+                showOnHover
+                aria-label={`Edit ${project.name}`}
+                title={`Edit ${project.name}`}
+                onClick={() => manage("projects", project)}
+              >
+                <MoreHorizontal />
+              </SidebarMenuAction>
+            </div>
+          </ProjectTarget>
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
+  );
 
   return (
     <BaseSidebar
@@ -92,10 +131,10 @@ export function WorkspaceSidebar({
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <SidebarHeader className="p-0">
+          <SidebarHeader className="sidebar-brand shrink-0 p-0">
             <Link
               href={workspaceHref({ view: "today" })}
-              className="flex items-center gap-2 px-6 pt-7 pb-8 text-xl font-semibold tracking-tight"
+              className="flex h-16 items-center gap-2 px-6 text-xl font-semibold tracking-tight"
               onClick={close}
             >
               <span className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-xl">
@@ -106,23 +145,9 @@ export function WorkspaceSidebar({
           </SidebarHeader>
 
           <SidebarContent className="min-w-0 gap-0 overflow-x-hidden pb-3">
-            <SidebarGroup className="px-4 py-0">
-              <Button
-                className="w-full justify-start"
-                size="lg"
-                onClick={() => {
-                  close?.();
-                  add();
-                }}
-              >
-                <Plus data-icon="inline-start" />
-                Add task<span className="ml-auto text-xs opacity-60">N</span>
-              </Button>
-            </SidebarGroup>
-
-            <SidebarGroup className="px-3 pt-5 pb-5">
+            <SidebarGroup className="shrink-0 px-3 pt-1 pb-3">
               <SidebarGroupContent>
-                <SidebarMenu>
+                <SidebarMenu className="sidebar-primary-menu">
                   {nav.map((item) => (
                     <SidebarMenuItem key={item.id}>
                       <ProjectTarget
@@ -154,100 +179,72 @@ export function WorkspaceSidebar({
               </SidebarGroupContent>
             </SidebarGroup>
 
-            <SidebarSeparator className="mx-5" />
+            <SidebarSeparator className="mx-5 shrink-0" />
 
-            <SidebarGroup className="px-3 pt-5">
-              <SidebarGroupLabel
-                render={
-                  <Link
-                    href={workspaceHref({ view: "projects" })}
-                    onClick={close}
-                  />
-                }
-                className="mb-2 h-auto min-w-0 px-3 text-[11px] font-medium tracking-wide"
-              >
-                Projects
-              </SidebarGroupLabel>
-              <SidebarGroupAction
-                aria-label="Create project"
-                title="Create project"
-                onClick={() => manage("projects")}
-              >
-                <Plus />
-              </SidebarGroupAction>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {state.projects.map((project) => (
-                    <SidebarMenuItem key={project.id}>
-                      <ProjectTarget projectId={project.id}>
-                        <div className="nav-entity group relative">
-                          <SidebarMenuButton
-                            render={
-                              <Link
-                                href={workspaceHref({
-                                  view: "projects",
-                                  selectedId: project.id,
-                                })}
-                                onClick={close}
-                              />
-                            }
-                            isActive={
-                              view === "projects" && selectedId === project.id
-                            }
-                            className="min-h-9 rounded-lg px-3 pr-9 text-[13px]"
-                          >
-                            <Folder
-                              className="size-4 shrink-0 text-(--entity-color)"
-                              data-color={project.color}
-                            />
-                            <span>{project.name}</span>
-                          </SidebarMenuButton>
-                          <SidebarMenuBadge className="right-9 text-[11px]">
-                            {open.filter((t) => t.projectId === project.id)
-                              .length || ""}
-                          </SidebarMenuBadge>
-                          <SidebarMenuAction
-                            showOnHover
-                            aria-label={`Edit ${project.name}`}
-                            title={`Edit ${project.name}`}
-                            onClick={() => manage("projects", project)}
-                          >
-                            <MoreHorizontal />
-                          </SidebarMenuAction>
-                        </div>
-                      </ProjectTarget>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            <div className="sidebar-collections flex min-h-48 flex-1 flex-col gap-2 py-2">
+              <SidebarGroup className="sidebar-collection min-h-20 shrink px-3 py-0">
+                <SidebarGroupLabel
+                  render={
+                    <Link
+                      href={workspaceHref({ view: "projects" })}
+                      onClick={close}
+                    />
+                  }
+                  className="h-9 min-w-0 px-3 text-[11px] font-medium tracking-wide"
+                >
+                  Projects
+                </SidebarGroupLabel>
+                <SidebarGroupAction
+                  className="top-2 right-5"
+                  aria-label="Create project"
+                  title="Create project"
+                  onClick={() => manage("projects")}
+                >
+                  <Plus />
+                </SidebarGroupAction>
+                <CollectionList label="Projects list">
+                  {projectMenu}
+                  {state.projects.length === 0 && (
+                    <p className="text-muted-foreground flex h-9 items-center px-3 text-xs">
+                      No projects yet
+                    </p>
+                  )}
+                </CollectionList>
+              </SidebarGroup>
 
-            <SidebarGroup className="px-3 pt-5">
-              <SidebarGroupLabel
-                render={
-                  <Link
-                    href={workspaceHref({ view: "tags" })}
-                    onClick={close}
-                  />
-                }
-                className="mb-2 h-auto min-w-0 px-3 text-[11px] font-medium tracking-wide"
-              >
-                Tags
-              </SidebarGroupLabel>
-              <SidebarGroupAction
-                aria-label="Create tag"
-                title="Create tag"
-                onClick={() => manage("tags")}
-              >
-                <Plus />
-              </SidebarGroupAction>
-              <SidebarGroupContent>
-                <TagTree close={close} label="Sidebar tags" />
-              </SidebarGroupContent>
-            </SidebarGroup>
+              <SidebarGroup className="sidebar-collection min-h-20 shrink px-3 py-0">
+                <SidebarGroupLabel
+                  render={
+                    <Link
+                      href={workspaceHref({ view: "tags" })}
+                      onClick={close}
+                    />
+                  }
+                  className="h-9 min-w-0 px-3 text-[11px] font-medium tracking-wide"
+                >
+                  Tags
+                </SidebarGroupLabel>
+                <SidebarGroupAction
+                  className="top-2 right-5"
+                  aria-label="Create tag"
+                  title="Create tag"
+                  onClick={() => manage("tags")}
+                >
+                  <Plus />
+                </SidebarGroupAction>
+                <CollectionList label="Tags list">
+                  <TagTree close={close} label="Sidebar tags" />
+                  {state.tags.length === 0 && (
+                    <p className="text-muted-foreground flex h-9 items-center px-3 text-xs">
+                      No tags yet
+                    </p>
+                  )}
+                </CollectionList>
+              </SidebarGroup>
+            </div>
           </SidebarContent>
-
-          <SidebarFooter className="mt-auto px-3 pt-8 pb-0">
+          <SidebarSeparator className="mx-5 shrink-0" />
+          <SidebarFooter className="sidebar-secondary-menu shrink-0 px-3 py-2">
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
@@ -284,6 +281,84 @@ export function WorkspaceSidebar({
         </div>
       </div>
     </BaseSidebar>
+  );
+}
+
+function CollectionList({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  const allocationRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const allocation = allocationRef.current!;
+    const viewport = viewportRef.current!;
+    const content = contentRef.current!;
+    const group = allocation.closest<HTMLElement>(".sidebar-collection")!;
+    const collections = group.parentElement!;
+    const resize = () => {
+      // Retain the list's natural size as its flex basis, then round only the
+      // visible viewport. Rounding the flex item itself would feed back into
+      // its allocation and prevent it from growing again on taller windows.
+      const contentHeight = content.getBoundingClientRect().height;
+      allocation.style.height = `${contentHeight}px`;
+      const row = content.querySelector<HTMLElement>(
+        '[data-sidebar="menu-button"], [data-tag-row]',
+      );
+      const rowHeight = row?.getBoundingClientRect().height;
+      const headingHeight = group
+        .querySelector('[data-sidebar="group-label"]')!
+        .getBoundingClientRect().height;
+      const styles = getComputedStyle(collections);
+      const sharedHeight =
+        collections.clientHeight -
+        parseFloat(styles.paddingTop) -
+        parseFloat(styles.paddingBottom) -
+        parseFloat(styles.rowGap);
+      // Reserve up to four whole rows for each collection before longer lists
+      // compete for the remaining space. Short windows reduce both minima.
+      const minimumRows = rowHeight
+        ? Math.max(
+            1,
+            Math.min(
+              4,
+              Math.floor((sharedHeight / 2 - headingHeight) / rowHeight),
+            ),
+          )
+        : 0;
+      group.style.minHeight = `${headingHeight + Math.min(contentHeight, rowHeight ? minimumRows * rowHeight : contentHeight)}px`;
+      const available = allocation.getBoundingClientRect().height;
+      viewport.style.height = `${rowHeight ? Math.floor((available + 0.5) / rowHeight) * rowHeight : available}px`;
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(allocation);
+    observer.observe(content);
+    observer.observe(collections);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <SidebarGroupContent
+      ref={allocationRef}
+      className="relative min-h-0 shrink"
+    >
+      {/* Drag previews reflow the tree; snapping must not move its hit regions. */}
+      <div
+        ref={viewportRef}
+        role="region"
+        aria-label={label}
+        tabIndex={0}
+        className="app-scrollbar absolute inset-x-0 top-0 snap-y snap-mandatory overflow-x-hidden overflow-y-auto has-[[data-tag-root-target]:not(:empty)]:snap-none **:data-tag-root-target:empty:h-0 **:data-tag-row:snap-start **:data-[sidebar=menu-action]:right-2 **:data-[sidebar=menu-button]:snap-start [&_ul]:gap-0"
+      >
+        <div ref={contentRef}>{children}</div>
+      </div>
+    </SidebarGroupContent>
   );
 }
 

@@ -247,6 +247,22 @@ export function TagTree({
       </li>,
     );
   }
+  const treeContents = (
+    <>
+      <ul
+        ref={treeRef}
+        aria-label={label}
+        className="flex min-w-0 flex-col gap-1"
+      >
+        {renderChildren(null)}
+      </ul>
+      <RootTarget
+        elementRef={rootRef}
+        active={dragging}
+        highlighted={destination?.targetId === null}
+      />
+    </>
+  );
   return (
     <DragDropProvider
       modifiers={tagModifiers}
@@ -299,18 +315,7 @@ export function TagTree({
           tagExpansion.reveal(next.parentId);
       }}
     >
-      <ul
-        ref={treeRef}
-        aria-label={label}
-        className="flex min-w-0 flex-col gap-1"
-      >
-        {renderChildren(null)}
-      </ul>
-      <RootTarget
-        elementRef={rootRef}
-        active={dragging}
-        highlighted={destination?.targetId === null}
-      />
+      {treeContents}
       <span className="sr-only" role="status">
         {destination
           ? `Move tag ${destination.intent} ${destination.targetId ? tags.path(destination.targetId) : "Top level"}`

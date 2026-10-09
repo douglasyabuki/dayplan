@@ -224,3 +224,16 @@
 .app-scrollbar [data-slot="scroll-area-viewport"] {
   scrollbar-color: auto;
 }
+
+/* Recover list space on short windows without reducing the row hit targets. */
+@media (max-height: 560px) {
+  .sidebar-brand > a {
+    height: 3rem;
+  }
+
+  .sidebar-primary-menu,
+  .sidebar-secondary-menu > ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
