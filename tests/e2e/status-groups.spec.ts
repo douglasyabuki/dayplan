@@ -300,7 +300,16 @@ for (const board of [false, true]) {
     await startDrag(page, "open");
     await over(page, trigger);
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
-    await expect(page.locator("[data-task-drop-preview]")).toHaveCount(1);
+    const preview = group(page, "parent", true).locator(
+      "[data-task-drop-preview]",
+    );
+    await expect(preview).toHaveAttribute(
+      "data-task-drop-preview",
+      /"completed":true/,
+    );
+    // Release over the expanded group's preview, not the collapsed header's
+    // old coordinates, which can now resolve to the source card on the board.
+    await over(page, preview);
     await page.mouse.up();
     await expect
       .poll(async () =>

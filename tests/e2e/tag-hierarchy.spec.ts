@@ -134,7 +134,7 @@ test("create, move with keyboard, rename, delete and undo a complete subtree", a
       exact: true,
     }),
   ).toBeVisible();
-  await action(page, "Personal", "Rename/Edit");
+  await action(page, "Personal", "Open/Edit");
   await page
     .getByRole("dialog")
     .getByLabel("Name", { exact: true })
