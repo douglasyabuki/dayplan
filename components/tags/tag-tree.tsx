@@ -24,8 +24,8 @@ import {
   Folder,
   MoreHorizontal,
   Pencil,
-  Plus,
   Tag as TagIcon,
+  Timeline,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -38,6 +38,7 @@ import {
   ContextMenuContent,
   ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -45,6 +46,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenuAction, SidebarMenuBadge } from "@/components/ui/sidebar";
@@ -71,6 +73,8 @@ const tagFeedback = [Feedback.configure({ dropAnimation: null })];
 const tagModifiers = [RestrictToVerticalAxis];
 
 const TAG_COLLISION_INSET_Y = 2;
+const tagDropdownMenuClass =
+  "w-56 max-w-(--available-width) **:data-[slot='dropdown-menu-item']:h-8 **:data-[slot='dropdown-menu-item']:text-[13px] **:data-[slot='dropdown-menu-item']:leading-4 [&_[data-slot='dropdown-menu-item']>svg]:size-3.5";
 const tagRowCollisionDetector: CollisionDetector = ({
   droppable,
   dragOperation,
@@ -406,16 +410,12 @@ function TagRow({
   const siblings = tags.children.get(tag.parentId) ?? [];
   const position = siblings.findIndex((t) => t.id === tag.id);
   const expanded = !tagExpansion.collapsed.has(tag.id);
+  const openEdit = () => setEntity({ kind: "tags", entity: tag });
   const actions = [
     {
       label: "Create subtag",
-      Icon: Plus,
+      Icon: Timeline,
       run: () => setEntity({ kind: "tags", parentId: tag.id }),
-    },
-    {
-      label: "Rename/Edit",
-      Icon: Pencil,
-      run: () => setEntity({ kind: "tags", entity: tag }),
     },
     {
       label: "Move to",
@@ -452,28 +452,24 @@ function TagRow({
           "Tag moved",
         ),
     },
-    {
-      label: "Delete",
-      Icon: Trash2,
-      run: () =>
-        confirm({
-          title: `Delete ${tag.name}?`,
-          description:
-            "This tag will be removed from all tasks. Its subtags will move to its parent, keeping their descendants and task assignments.",
-          action: () => {
-            if (
-              act(
-                { type: "deleteEntity", kind: "tags", id: tag.id },
-                "Tag deleted",
-              ) &&
-              view === "tags" &&
-              selectedId === tag.id
-            )
-              router.push("/tags");
-          },
-        }),
-    },
   ];
+  const deleteAction = () =>
+    confirm({
+      title: `Delete ${tag.name}?`,
+      description:
+        "This tag will be removed from all tasks. Its subtags will move to its parent, keeping their descendants and task assignments.",
+      action: () => {
+        if (
+          act(
+            { type: "deleteEntity", kind: "tags", id: tag.id },
+            "Tag deleted",
+          ) &&
+          view === "tags" &&
+          selectedId === tag.id
+        )
+          router.push("/tags");
+      },
+    });
   const active = destination?.targetId === tag.id;
   return (
     <ContextMenu>
@@ -546,7 +542,14 @@ function TagRow({
             >
               <MoreHorizontal />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-40">
+            <DropdownMenuContent align="end" className={tagDropdownMenuClass}>
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={openEdit}>
+                  <Pencil />
+                  Open/Edit
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 {actions.map((action) => (
                   <DropdownMenuItem
@@ -554,15 +557,30 @@ function TagRow({
                     disabled={action.disabled}
                     onClick={action.run}
                   >
+                    <action.Icon />
                     {action.label}
                   </DropdownMenuItem>
                 ))}
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem variant="destructive" onClick={deleteAction}>
+                  <Trash2 />
+                  Delete
+                </DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuGroup>
+          <ContextMenuItem onClick={openEdit}>
+            <Pencil />
+            Open/Edit
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
         <ContextMenuGroup>
           {actions.map((action) => (
             <ContextMenuItem
@@ -574,6 +592,13 @@ function TagRow({
               {action.label}
             </ContextMenuItem>
           ))}
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem variant="destructive" onClick={deleteAction}>
+            <Trash2 />
+            Delete
+          </ContextMenuItem>
         </ContextMenuGroup>
       </ContextMenuContent>
     </ContextMenu>
