@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
-import { WorkspaceProvider } from "@/contexts/workspace";
+import { WorkspaceProvider } from "@/stores/workspace/provider";
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   return (

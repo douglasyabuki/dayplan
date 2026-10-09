@@ -3,10 +3,10 @@
 import { ArrowRight, FolderOpen, Plus } from "lucide-react";
 import Link from "next/link";
 
-import { TagTree } from "@/components/collections/tag-tree";
+import { TagTree } from "@/components/tags/tag-tree";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
-import { type CollectionKind, workspaceHref } from "@/lib/tasks/routes";
+import { type CollectionKind, workspaceHref } from "@/lib/workspace/routes";
 
 export function WorkspaceCollectionView({ kind }: { kind: CollectionKind }) {
   const { state, setEntity } = useWorkspaceController();

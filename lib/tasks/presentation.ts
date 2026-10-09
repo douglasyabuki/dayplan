@@ -1,5 +1,6 @@
-import { addDays, formatDate, timeLabel, timeToMinutes } from "./dates";
-import type { DateValue, Schedule } from "./types";
+import { addDays, formatDate, timeLabel, timeToMinutes } from "@/lib/dates";
+import type { DateValue } from "@/types-and-constants/dates";
+import type { Schedule } from "@/types-and-constants/tasks";
 
 export function taskDayLabel(date: string, today: string) {
   if (date === today) return "Today";

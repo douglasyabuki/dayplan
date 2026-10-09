@@ -1,45 +1,24 @@
-import {
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-import ts from "typescript";
-import { afterAll } from "vitest";
-
+import * as drag from "@/lib/tasks/drag";
+import * as editor from "@/lib/tasks/editor";
+import * as factory from "@/lib/tasks/factory";
+import * as hierarchy from "@/lib/tasks/hierarchy";
+import * as mutations from "@/lib/tasks/mutations";
+import * as operations from "@/lib/tasks/operations";
+import * as presentation from "@/lib/tasks/presentation";
+import * as recurrence from "@/lib/tasks/recurrence";
+import * as grouping from "@/lib/workspace/grouping";
+import * as seed from "@/lib/workspace/seed";
+import * as selectors from "@/lib/workspace/selectors";
+import * as commands from "@/stores/workspace/commands";
+import * as persistence from "@/stores/workspace/persistence";
+import * as reducer from "@/stores/workspace/reducer";
 import type {
   Occurrence,
   RecurrenceRule,
   Task,
   TaskReference,
-  Workspace,
-} from "../lib/tasks/types";
-
-const directory = mkdtempSync(join(tmpdir(), "dayplan-hierarchy-"));
-for (const file of readdirSync(new URL("../lib/tasks", import.meta.url)).filter(
-  (f) => f.endsWith(".ts"),
-)) {
-  writeFileSync(
-    join(directory, file.replace(/\.ts$/, ".js")),
-    ts.transpileModule(
-      readFileSync(new URL(`../lib/tasks/${file}`, import.meta.url), "utf8"),
-      {
-        compilerOptions: {
-          module: ts.ModuleKind.CommonJS,
-          target: ts.ScriptTarget.ES2022,
-        },
-      },
-    ).outputText,
-  );
-}
-
-const require = createRequire(import.meta.url);
-
+} from "@/types-and-constants/tasks";
+import type { Workspace } from "@/types-and-constants/workspace";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type RuntimeDomain = {
   [name: string]: any;
@@ -57,20 +36,21 @@ type RuntimeDomain = {
 
 export const domain = Object.assign(
   {},
-  ...[
-    "hierarchy",
-    "recurrence",
-    "store",
-    "editor",
-    "operations",
-    "drag",
-    "selectors",
-    "presentation",
-    "seed",
-  ].map((name) => require(join(directory, name + ".js"))),
+  persistence,
+  mutations,
+  grouping,
+  hierarchy,
+  recurrence,
+  reducer,
+  editor,
+  operations,
+  commands,
+  drag,
+  selectors,
+  presentation,
+  seed,
+  factory,
 ) as RuntimeDomain;
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
-
 export const task = (id: string, extra: Partial<Task> = {}): Task => ({
   id,
   parentId: null,

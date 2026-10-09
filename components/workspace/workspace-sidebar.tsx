@@ -16,7 +16,7 @@ import {
 import Link from "next/link";
 import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
 
-import { TagTree } from "@/components/collections/tag-tree";
+import { TagTree } from "@/components/tags/tag-tree";
 import {
   Sidebar as BaseSidebar,
   SidebarContent,
@@ -34,11 +34,12 @@ import {
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useWorkspace } from "@/contexts/workspace";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
-import { workspaceHref, type WorkspaceViewName } from "@/lib/tasks/routes";
-import type { Occurrence, Project } from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
+import { workspaceHref, type WorkspaceViewName } from "@/lib/workspace/routes";
+import { useWorkspace } from "@/stores/workspace/provider";
+import type { Project } from "@/types-and-constants/projects";
+import type { Occurrence } from "@/types-and-constants/tasks";
 
 import { WorkspaceUtilityRail } from "./workspace-utility-rail";
 

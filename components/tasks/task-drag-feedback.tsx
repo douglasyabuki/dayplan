@@ -6,8 +6,8 @@ import { Fragment, type ReactNode, useLayoutEffect, useRef } from "react";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { taskPreviewEntries } from "@/lib/tasks/drag";
 import { occurrenceParent } from "@/lib/tasks/recurrence";
-import type { Occurrence } from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
+import type { Occurrence } from "@/types-and-constants/tasks";
 
 export function SectionRemovalDropZone() {
   const { source } = useDragOperation();

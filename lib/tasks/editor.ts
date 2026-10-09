@@ -1,14 +1,7 @@
-import { taskDraftAction, validateTaskDraft } from "./operations";
-import {
-  asOccurrence,
-  expandTasks,
-  reference,
-  resolveOccurrence,
-} from "./recurrence";
-import { reducer } from "./store";
-import type { Occurrence, TaskReference, Workspace } from "./types";
-export { taskDraftAction, taskFields, validateTaskDraft } from "./operations";
+import type { Occurrence, TaskReference } from "@/types-and-constants/tasks";
+import type { Workspace } from "@/types-and-constants/workspace";
 
+import { expandTasks, reference, resolveOccurrence } from "./recurrence";
 export type DraftEntry = {
   original: Occurrence;
   changes: Partial<Occurrence>;
@@ -16,27 +9,9 @@ export type DraftEntry = {
   scope: "occurrence" | "series";
   parentRef?: TaskReference;
 };
+
 export type DraftEntries = Record<string, DraftEntry>;
-/** Merge only staged fields with live state; immediate operations cannot be overwritten. */
-export function commitDrafts(
-  state: Workspace,
-  entries: DraftEntries,
-): Workspace {
-  let next = state;
-  for (const entry of Object.values(entries)) {
-    const latest = entry.isNew
-      ? entry.original
-      : resolveOccurrence(next, reference(entry.original));
-    if (!latest) continue;
-    const draft = { ...latest, ...entry.changes };
-    const error = validateTaskDraft(draft);
-    if (error) throw new Error(error);
-    if (entry.isNew && entry.parentRef && !("parentId" in entry.changes))
-      draft.parentId = entry.parentRef.taskId;
-    next = reducer(next, taskDraftAction(next, latest, draft, entry.scope));
-  }
-  return next;
-}
+
 export function sessionTasks(
   state: Workspace,
   entries: DraftEntries,
@@ -52,4 +27,3 @@ export function sessionTasks(
   }
   return [...result.values()];
 }
-export { asOccurrence };

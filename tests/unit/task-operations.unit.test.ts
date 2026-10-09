@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import type { Occurrence, Task, Workspace } from "../../lib/tasks/types";
+import type { Occurrence, Task } from "@/types-and-constants/tasks";
+import type { Workspace } from "@/types-and-constants/workspace";
+
 import {
   child,
   daily,

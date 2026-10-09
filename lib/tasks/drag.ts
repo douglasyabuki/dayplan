@@ -1,3 +1,7 @@
+import type { Section } from "@/types-and-constants/sections";
+import type { Occurrence, TaskReference } from "@/types-and-constants/tasks";
+import type { Workspace } from "@/types-and-constants/workspace";
+
 import { taskIndex } from "./hierarchy";
 import {
   isOccurrenceDate,
@@ -7,7 +11,6 @@ import {
   referenceKey,
   resolveOccurrence,
 } from "./recurrence";
-import type { Occurrence, Section, TaskReference, Workspace } from "./types";
 
 /** Nest only over a narrow title band; the remaining card area reorders. */
 export function taskPointerIntent(

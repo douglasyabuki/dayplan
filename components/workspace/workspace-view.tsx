@@ -20,13 +20,13 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { TaskCalendarView } from "@/components/tasks/task-calendar";
-import { SectionRemovalDropZone } from "@/components/tasks/task-drag-feedback";
-import { KanbanTaskBoard, TaskList } from "@/components/tasks/task-groups";
+import { TaskCalendarView } from "@/components/calendar/task-calendar";
 import {
   KanbanSectionBoard,
   ListSectionGroups,
-} from "@/components/tasks/task-sections";
+} from "@/components/sections/task-sections";
+import { SectionRemovalDropZone } from "@/components/tasks/task-drag-feedback";
+import { KanbanTaskBoard, TaskList } from "@/components/tasks/task-groups";
 import { Button } from "@/components/ui/button";
 import { Calendar as DatePicker } from "@/components/ui/calendar";
 import {
@@ -51,10 +51,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
-import { dateKey, parseDay } from "@/lib/tasks/dates";
-import type { WorkspaceRoute } from "@/lib/tasks/routes";
-import { priorities } from "@/lib/tasks/types";
+import { dateKey, parseDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import type { WorkspaceRoute } from "@/lib/workspace/routes";
+import { priorities } from "@/types-and-constants/tasks";
 
 import { WorkspaceContentLoading } from "./workspace-content-loading";
 import { WorkspaceFooter } from "./workspace-footer";

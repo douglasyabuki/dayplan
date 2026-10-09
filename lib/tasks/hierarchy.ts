@@ -1,4 +1,5 @@
-import type { Task, Workspace } from "./types";
+import type { Task } from "@/types-and-constants/tasks";
+import type { Workspace } from "@/types-and-constants/workspace";
 
 function buildTaskIndex(tasks: Task[]) {
   const byId = new Map(tasks.map((task) => [task.id, task]));
@@ -55,7 +56,10 @@ export function validateHierarchy(tasks: Task[]) {
   }
 }
 
-export function normalizeTask(state: Workspace, task: Task): Task {
+export function normalizeTask(
+  state: Pick<Workspace, "sections">,
+  task: Task,
+): Task {
   if (task.parentId) return { ...task, projectId: null, sectionId: null };
   return {
     ...task,

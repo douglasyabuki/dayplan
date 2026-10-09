@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useWorkspace } from "@/contexts/workspace";
+import { useWorkspace } from "@/stores/workspace/provider";
 
 export function WorkspaceFeedback() {
   const {

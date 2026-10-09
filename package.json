@@ -13,7 +13,7 @@
     "test:browser": "vitest run --project browser --passWithNoTests",
     "test:e2e": "playwright test",
 
-    "format": "prettier --write \"{app,components,contexts,lib,tests}/**/*.{js,jsx,ts,tsx,css}\"",
+    "format": "prettier --write \"{app,components,contexts,lib,tests,types-and-constants,stores,hooks}/**/*.{js,jsx,ts,tsx,css}\"",
     "lint": "eslint",
     "lint:fix": "eslint . --fix",
     "fix": "npm run format && npm run lint:fix"

@@ -13,8 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { useWorkspace } from "@/contexts/workspace";
-import { workspaceHref } from "@/lib/tasks/routes";
+import { workspaceHref } from "@/lib/workspace/routes";
+import { useWorkspace } from "@/stores/workspace/provider";
 
 import { Avatar, AvatarFallback } from "../ui/avatar";
 

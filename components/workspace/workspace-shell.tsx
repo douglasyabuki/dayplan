@@ -19,11 +19,11 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceUtilityRail } from "@/components/workspace/workspace-utility-rail";
-import { useWorkspace } from "@/contexts/workspace";
 import {
   useWorkspaceController,
   WorkspaceController,
 } from "@/contexts/workspace-controller";
+import { useWorkspace } from "@/stores/workspace/provider";
 
 import { WorkspaceFeedback } from "./workspace-feedback";
 import { WorkspaceLoading } from "./workspace-loading";

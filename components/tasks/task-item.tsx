@@ -28,7 +28,11 @@ import {
 import Link from "next/link";
 import { type ComponentProps, type Ref, useId, useRef } from "react";
 
-import { TagBadge } from "@/components/collections/tag-badge";
+import { TagBadge } from "@/components/tags/tag-badge";
+import {
+  type QuickActionKind,
+  TaskMetadataButton,
+} from "@/components/tasks/controls/task-quick-actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -54,7 +58,6 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { PopoverTrigger } from "@/components/ui/popover";
-import { useWorkspace } from "@/contexts/workspace";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { taskIndex } from "@/lib/tasks/hierarchy";
 import {
@@ -69,21 +72,18 @@ import {
   reference,
   referenceKey,
 } from "@/lib/tasks/recurrence";
-import { workspaceHref } from "@/lib/tasks/routes";
-import {
-  type Occurrence,
-  type Priority,
-  type Project,
-  type Tag as TaskTag,
-} from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
+import { workspaceHref } from "@/lib/workspace/routes";
+import { useWorkspace } from "@/stores/workspace/provider";
+import { type Project } from "@/types-and-constants/projects";
+import { type Tag as TaskTag } from "@/types-and-constants/tags";
+import { type Occurrence, type Priority } from "@/types-and-constants/tasks";
 
 import {
   isTaskInteractive,
   metadataClass,
   taskInteractionBoundary,
 } from "./task-interaction";
-import { type QuickActionKind, TaskMetadataButton } from "./task-quick-actions";
 import { TaskStatusGroups } from "./task-status-groups";
 
 export type TaskOpenOptions = { triggerId?: string; focusSubtask?: boolean };

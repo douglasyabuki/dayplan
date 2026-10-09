@@ -3,10 +3,9 @@
 import { DragOverlay } from "@dnd-kit/react";
 import { Check } from "lucide-react";
 
-import { CollectionDialog } from "@/components/collections/collection-dialog";
+import { SectionDialog } from "@/components/sections/section-dialog";
+import { TaskEditor } from "@/components/tasks/editor/task-editor";
 import { TaskDragSnapshot } from "@/components/tasks/task-drag-feedback";
-import { TaskEditor } from "@/components/tasks/task-editor";
-import { SectionDialog } from "@/components/tasks/task-sections";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { CollectionDialog } from "@/components/workspace/collection-dialog";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 
 export function WorkspaceOverlays() {

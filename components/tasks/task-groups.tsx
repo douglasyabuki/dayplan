@@ -21,11 +21,11 @@ import {
 } from "@/components/ui/empty";
 import { ItemGroup } from "@/components/ui/item";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useWorkspace } from "@/contexts/workspace";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
-import { formatDate } from "@/lib/tasks/dates";
-import type { Occurrence } from "@/lib/tasks/types";
+import { formatDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/stores/workspace/provider";
+import type { Occurrence } from "@/types-and-constants/tasks";
 
 import { TaskListPreview } from "./task-drag-feedback";
 

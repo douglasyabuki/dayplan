@@ -1,9 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { useWorkspace, WorkspaceProvider } from "../contexts/workspace";
-import { newTask, seedWorkspace } from "../lib/tasks/seed";
-import { STORAGE_KEY } from "../lib/tasks/store";
+import { newTask } from "@/lib/tasks/factory";
+import { seedWorkspace } from "@/lib/workspace/seed";
+import { STORAGE_KEY } from "@/stores/workspace/persistence";
+import { useWorkspace, WorkspaceProvider } from "@/stores/workspace/provider";
 
 function Harness() {
   const { state, ready, act, undo, notice, operationError, storageError } =

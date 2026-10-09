@@ -1,12 +1,13 @@
-import { addDays, daysBetween, parseDay, shiftDate } from "./dates";
-import { taskIndex } from "./hierarchy";
+import { addDays, daysBetween, parseDay, shiftDate } from "@/lib/dates";
 import type {
   Occurrence,
   OccurrenceContext,
   Task,
   TaskReference,
-  Workspace,
-} from "./types";
+} from "@/types-and-constants/tasks";
+import type { Workspace } from "@/types-and-constants/workspace";
+
+import { taskIndex } from "./hierarchy";
 
 export function referenceKey(ref: TaskReference): string {
   return JSON.stringify(
@@ -41,7 +42,7 @@ export function reference(task: Occurrence): TaskReference {
   };
 }
 export function recurrenceRoot(
-  state: Workspace,
+  state: Pick<Workspace, "tasks">,
   taskId: string,
 ): Task | undefined {
   const index = taskIndex(state.tasks),
@@ -83,7 +84,7 @@ export function isOccurrenceDate(task: Task, date: string) {
   return day.getDate() === Math.min(first.getDate(), lastDay);
 }
 export function resolveOccurrence(
-  state: Workspace,
+  state: Pick<Workspace, "tasks" | "exceptions">,
   ref: TaskReference,
   seen = new Set<string>(),
 ): Occurrence | undefined {
@@ -137,7 +138,7 @@ export function resolveOccurrence(
 }
 /** Independent recurrence roots deliberately have no occurrence parent. */
 export function occurrenceParent(
-  state: Workspace,
+  state: Pick<Workspace, "tasks" | "exceptions">,
   task: Occurrence,
 ): TaskReference | null {
   const override = state.exceptions[task.id];
@@ -159,7 +160,7 @@ const expansionCache = new WeakMap<
 >();
 
 export function expandTasks(
-  state: Workspace,
+  state: Pick<Workspace, "tasks" | "exceptions">,
   from: string,
   to: string,
 ): Occurrence[] {
@@ -203,7 +204,7 @@ export function expandTasks(
   return expanded;
 }
 export function occurrenceChildren(
-  state: Workspace,
+  state: Pick<Workspace, "tasks" | "exceptions">,
   parent: Occurrence,
   all: Occurrence[],
 ) {

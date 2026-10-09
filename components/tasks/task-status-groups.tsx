@@ -14,8 +14,8 @@ import {
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { referenceKey } from "@/lib/tasks/recurrence";
-import type { Occurrence, TaskReference } from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
+import type { Occurrence, TaskReference } from "@/types-and-constants/tasks";
 
 import { TaskListPreview } from "./task-drag-feedback";
 

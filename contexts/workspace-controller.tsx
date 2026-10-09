@@ -2,7 +2,6 @@
 
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   createContext,
   type ReactNode,
@@ -14,20 +13,23 @@ import {
   useState,
 } from "react";
 
-import type { TaskOpenOptions } from "@/components/tasks/task-item";
 import {
   type QuickActionKind,
   TaskQuickActionPopover,
-} from "@/components/tasks/task-quick-actions";
-import { useTagExpansion } from "@/contexts/tag-expansion";
-import { useWorkspace } from "@/contexts/workspace";
-import { addDays, parseDay } from "@/lib/tasks/dates";
+} from "@/components/tasks/controls/task-quick-actions";
+import type { TaskOpenOptions } from "@/components/tasks/task-item";
+import { type CollectionDialogState } from "@/components/workspace/collection-dialog-state";
+import { useTagExpansion } from "@/hooks/tags/use-tag-expansion";
+import { useWorkspaceNavigation } from "@/hooks/workspace/use-workspace-navigation";
+import { addDays, parseDay } from "@/lib/dates";
+import { tagIndex } from "@/lib/tags/hierarchy";
+import { tagCounts } from "@/lib/tags/selectors";
 import {
   type DragDestination,
   dragDestination as resolveDragDestination,
   taskPointerIntent,
 } from "@/lib/tasks/drag";
-import { taskDropAction } from "@/lib/tasks/operations";
+import { newTask } from "@/lib/tasks/factory";
 import {
   asOccurrence,
   expandTasks,
@@ -36,22 +38,15 @@ import {
   referenceKey,
   resolveOccurrence,
 } from "@/lib/tasks/recurrence";
-import {
-  resolveWorkspaceRoute,
-  workspaceHref,
-  workspaceQueryHref,
-  type WorkspaceViewName,
-} from "@/lib/tasks/routes";
-import { newTask } from "@/lib/tasks/seed";
-import { groupTasks, selectTasks } from "@/lib/tasks/selectors";
-import { tagCounts, tagIndex } from "@/lib/tasks/tags";
-import {
-  type CollectionDialogState,
-  containerKey,
-  type Occurrence,
-  type Project,
-  type Section,
-} from "@/lib/tasks/types";
+import { groupTasks } from "@/lib/workspace/grouping";
+import { containerKey } from "@/lib/workspace/layout";
+import { workspaceHref, type WorkspaceViewName } from "@/lib/workspace/routes";
+import { selectTasks } from "@/lib/workspace/selectors";
+import { taskDropAction } from "@/stores/workspace/commands";
+import { useWorkspace } from "@/stores/workspace/provider";
+import { type Project } from "@/types-and-constants/projects";
+import { type Section } from "@/types-and-constants/sections";
+import { type Occurrence } from "@/types-and-constants/tasks";
 
 const titles: Record<WorkspaceViewName, string> = {
   today: "Today",
@@ -80,10 +75,8 @@ const descriptions: Record<WorkspaceViewName, string> = {
 
 function useControllerState() {
   const { state, today, save, act, reset, storageError } = useWorkspace();
-  const pathname = usePathname();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const routeKey = pathname + "?" + searchParams.toString();
+  const { router, routeKey, view, selectedId, params, setParams } =
+    useWorkspaceNavigation();
   const [quickAction, setQuickAction] = useState<{
     task: Occurrence;
     kind: QuickActionKind;
@@ -125,12 +118,7 @@ function useControllerState() {
       setQuickAction(null);
     }
   }, [state, quickAction]);
-  const route = resolveWorkspaceRoute(pathname) ?? { view: "today" as const };
-  const { view, selectedId } = route;
-  const params = useMemo(
-    () => new URLSearchParams(searchParams.toString()),
-    [searchParams],
-  );
+
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [settings, setSettings] = useState(false);
   const [entity, setEntity] = useState<CollectionDialogState | null>(null);
@@ -239,11 +227,7 @@ function useControllerState() {
     const ref = parseReference(selectedTaskId);
     if (ref) selectedTask = resolveOccurrence(state, ref);
   }
-  function setParams(changes: Record<string, string | null>, replace = false) {
-    const url = workspaceQueryHref(pathname, params, changes);
-    if (replace) router.replace(url, { scroll: false });
-    else router.push(url, { scroll: false });
-  }
+
   function open(task: Occurrence, options?: TaskOpenOptions) {
     closeTaskActions();
     const action = () =>

@@ -1,25 +1,22 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import { tagIndex } from "@/lib/tags/hierarchy";
+import { tagCounts } from "@/lib/tags/selectors";
+import { matchesSearch, selectTasks } from "@/lib/workspace/selectors";
+import {
+  readWorkspace,
+  STORAGE_KEY,
+  writeWorkspace,
+} from "@/stores/workspace/persistence";
+import { reducer } from "@/stores/workspace/reducer";
+import { deleteTag, moveTag, saveTag } from "@/stores/workspace/transitions";
+import type { Tag } from "@/types-and-constants/tags";
+
 import {
   asOccurrence,
   expandTasks,
   referenceKey,
 } from "../../lib/tasks/recurrence";
-import { matchesSearch, selectTasks } from "../../lib/tasks/selectors";
-import {
-  readWorkspace,
-  reducer,
-  STORAGE_KEY,
-  writeWorkspace,
-} from "../../lib/tasks/store";
-import {
-  deleteTag,
-  moveTag,
-  saveTag,
-  tagCounts,
-  tagIndex,
-} from "../../lib/tasks/tags";
-import type { Tag } from "../../lib/tasks/types";
 import { state, task } from "../task-fixtures";
 
 const tag = (id: string, parentId: string | null = null, order = 0): Tag => ({

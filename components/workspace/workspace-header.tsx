@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
-import { formatDate } from "@/lib/tasks/dates";
+import { formatDate } from "@/lib/dates";
 
 export function WorkspaceHeader() {
   const {
