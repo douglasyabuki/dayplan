@@ -6,7 +6,20 @@ import type { TagIndex } from "@/lib/tags/hierarchy";
 
 export const TAG_EXPANSION_KEY = "dayplan.tags.collapsed.v1";
 
-export function useTagExpansion(index: TagIndex, selectedId?: string) {
+type TagExpansionOptions = {
+  index: TagIndex;
+  selectedId?: string;
+};
+
+/**
+ * Persists collapsed tag branches and reveals the selected tag when navigation changes.
+ * @param {TagExpansionOptions} options Tag hierarchy index and optional selected tag ID.
+ * @returns {object} An object with `collapsed`, the set of collapsed tag IDs, `toggle(id)` to expand or collapse one ID, and `reveal(id)` to expand its ancestors. `reveal(null)` leaves the set unchanged.
+ * @example
+ * const { collapsed, toggle, reveal } = useTagExpansion({ index, selectedId });
+ * reveal(tag.id);
+ */
+export function useTagExpansion({ index, selectedId }: TagExpansionOptions) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     try {
       const stored: unknown = JSON.parse(
