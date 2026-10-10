@@ -2,8 +2,11 @@
 
 import { DragOverlay } from "@dnd-kit/react";
 import { Check } from "lucide-react";
+import { useRouter } from "next/navigation";
 
+import { ProjectDialog } from "@/components/projects/project-dialog";
 import { SectionDialog } from "@/components/sections/section-dialog";
+import { TagDialog } from "@/components/tags/tag-dialog";
 import { TaskEditor } from "@/components/tasks/editor/task-editor";
 import { TaskDragSnapshot } from "@/components/tasks/task-drag-feedback";
 import { Button } from "@/components/ui/button";
@@ -16,10 +19,10 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { CollectionDialog } from "@/components/workspace/collection-dialog";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 
 export function WorkspaceOverlays() {
+  const router = useRouter();
   const {
     state,
     dragSnapshot,
@@ -29,6 +32,9 @@ export function WorkspaceOverlays() {
     setSettings,
     entity,
     setEntity,
+    tagExpansion,
+    view,
+    selectedId,
     sectionDialog,
     setSectionDialog,
     projectId,
@@ -86,10 +92,21 @@ export function WorkspaceOverlays() {
           close={() => setSectionDialog(null)}
         />
       )}
-      {entity && (
-        <CollectionDialog
+      {entity?.kind === "projects" && (
+        <ProjectDialog
+          key={entity.entity?.id ?? entity.kind}
+          entity={entity.entity}
+          close={() => setEntity(null)}
+        />
+      )}
+      {entity?.kind === "tags" && (
+        <TagDialog
           key={entity.entity?.id ?? entity.kind}
           {...entity}
+          reveal={tagExpansion.reveal}
+          onDeleted={(id) => {
+            if (view === "tags" && selectedId === id) router.push("/tags");
+          }}
           close={() => setEntity(null)}
         />
       )}

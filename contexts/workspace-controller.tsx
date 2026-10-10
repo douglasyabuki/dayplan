@@ -3,7 +3,6 @@
 import { createContext, type ReactNode, useContext, useState } from "react";
 
 import { TaskQuickActionPopover } from "@/components/tasks/controls/task-quick-actions";
-import type { CollectionDialogState } from "@/components/workspace/collection-dialog-state";
 import { useWorkspaceDrag } from "@/hooks/workspace/use-workspace-drag";
 import { useWorkspaceNavigation } from "@/hooks/workspace/use-workspace-navigation";
 import { useWorkspaceTaskActions } from "@/hooks/workspace/use-workspace-task-actions";
@@ -12,6 +11,11 @@ import { useWorkspaceView } from "@/hooks/workspace/use-workspace-view";
 import { useWorkspace } from "@/stores/workspace/provider";
 import type { Project } from "@/types-and-constants/projects";
 import type { Section } from "@/types-and-constants/sections";
+import type { Tag } from "@/types-and-constants/tags";
+
+type CollectionDialogState =
+  | { kind: "projects"; entity?: Project }
+  | { kind: "tags"; entity?: Tag; parentId?: string | null; mode?: "move" };
 
 function useControllerState() {
   const { state, today, save, act, reset, storageError } = useWorkspace();
