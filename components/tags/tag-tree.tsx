@@ -19,7 +19,6 @@ import {
 import {
   ArrowDown,
   ArrowUp,
-  ChevronDown,
   ChevronRight,
   Folder,
   MoreHorizontal,
@@ -66,7 +65,11 @@ type Destination = {
   intent: "before" | "after" | "inside";
 };
 const tagSensors = [
-  PointerSensor.configure({ preventActivation: () => false }),
+  PointerSensor.configure({
+    preventActivation: (event) =>
+      event.target instanceof Element &&
+      event.target.closest("[data-drag-ignore]") !== null,
+  }),
   KeyboardSensor,
 ];
 const tagFeedback = [Feedback.configure({ dropAnimation: null })];
@@ -497,12 +500,16 @@ function TagRow({
             <Button
               variant="ghost"
               size="icon-xs"
-              className="absolute top-1/2 left-0 size-3 -translate-y-1/2 p-0 [&_svg]:size-3"
+              className={cn(
+                "absolute top-1/2 -left-1 z-1 size-4 -translate-y-1/2 rounded-full bg-transparent p-1 dark:bg-transparent [&_svg]:size-3",
+                expanded && "rotate-90",
+              )}
               aria-label={`${expanded ? "Collapse" : "Expand"} ${tag.name}`}
               aria-expanded={expanded}
+              data-drag-ignore
               onClick={() => tagExpansion.toggle(tag.id)}
             >
-              {expanded ? <ChevronDown /> : <ChevronRight />}
+              <ChevronRight />
             </Button>
           )}
           <Link
@@ -535,6 +542,7 @@ function TagRow({
                   showOnHover
                   aria-label={`Actions for ${tag.name}`}
                   title={`Actions for ${tag.name}`}
+                  data-drag-ignore
                 />
               }
             >

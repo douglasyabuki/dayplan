@@ -349,8 +349,14 @@ test("dragging row edges reorders and the root target promotes a subtree", async
   async function drag(id: string, destination: string, fraction: number) {
     const source = sidebar(page).locator(`[data-tag-row="${id}"]`);
     await expect(source).toHaveAttribute("data-tag-busy", "false");
-    const start = (await source.getByRole("link").boundingBox())!;
-    await page.mouse.move(start.x + 10, start.y + start.height / 2);
+    const start = (await source
+      .getByRole("link")
+      .locator("span.truncate")
+      .boundingBox())!;
+    await page.mouse.move(
+      start.x + start.width / 2,
+      start.y + start.height / 2,
+    );
     await page.mouse.down();
     await page.mouse.move(start.x + 20, start.y + start.height / 2, {
       steps: 5,
@@ -443,11 +449,15 @@ test("dropping a parent over its descendant leaves the workspace unchanged", asy
   const source = (await sidebar(page)
     .locator('[data-tag-row="work"]')
     .getByRole("link")
+    .locator("span.truncate")
     .boundingBox())!;
   const descendant = (await sidebar(page)
     .locator('[data-tag-row="weekly"]')
     .boundingBox())!;
-  await page.mouse.move(source.x + 15, source.y + source.height / 2);
+  await page.mouse.move(
+    source.x + source.width / 2,
+    source.y + source.height / 2,
+  );
   await page.mouse.down();
   await page.mouse.move(source.x + 25, source.y + source.height / 2, {
     steps: 5,
