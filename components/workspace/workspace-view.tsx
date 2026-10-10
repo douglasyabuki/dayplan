@@ -1,15 +1,23 @@
 "use client";
 
 import {
+  ArrowDownAZ,
+  ArrowDownWideNarrow,
   ArrowRight,
   Calendar,
+  CalendarClock,
   CalendarDays,
   CalendarOff,
+  ChevronDown,
+  ClockArrowDown,
   Flag,
   Folder,
   FolderTree,
+  Grid2X2X,
+  Layers2,
   LayoutList,
   ListChecks,
+  ListOrdered,
   ListTodo,
   type LucideIcon,
   Plus,
@@ -34,6 +42,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -59,6 +75,19 @@ import { priorities } from "@/types-and-constants/tasks";
 import { WorkspaceContentLoading } from "./workspace-content-loading";
 import { WorkspaceFooter } from "./workspace-footer";
 import { WorkspaceHeader } from "./workspace-header";
+
+const sortOptions: {
+  value: string;
+  label: string;
+  Icon: LucideIcon;
+}[] = [
+  { value: "manual", label: "Manual order", Icon: ListOrdered },
+  { value: "deadline", label: "Due date", Icon: CalendarClock },
+  { value: "schedule", label: "Scheduled date", Icon: CalendarDays },
+  { value: "priority", label: "Priority", Icon: Flag },
+  { value: "title", label: "Title", Icon: ArrowDownAZ },
+  { value: "created", label: "Newest first", Icon: ClockArrowDown },
+];
 
 export function WorkspaceView({
   route,
@@ -103,6 +132,41 @@ export function WorkspaceView({
   const compact =
     ["inbox", "today", "upcoming", "tasks", "calendar"].includes(view) ||
     !!selectedEntity;
+  const selectedSort =
+    sortOptions.find(({ value }) => value === params.get("sort")) ??
+    sortOptions[0];
+  const groupOptions: {
+    value: string;
+    label: string;
+    Icon: LucideIcon;
+  }[] = [
+    ...(sectioned
+      ? [{ value: "sections", label: "Sections", Icon: FolderTree }]
+      : []),
+    ...(view === "today"
+      ? [{ value: "today", label: "Today sections", Icon: Calendar }]
+      : []),
+    ...(view === "upcoming"
+      ? [{ value: "upcoming", label: "Upcoming dates", Icon: CalendarClock }]
+      : []),
+    { value: "none", label: "No grouping", Icon: Grid2X2X },
+    { value: "schedule", label: "Scheduled date", Icon: CalendarDays },
+    { value: "deadline", label: "Due date", Icon: CalendarClock },
+    { value: "project", label: "Project", Icon: Folder },
+    { value: "priority", label: "Priority", Icon: Flag },
+    { value: "status", label: "Status", Icon: ListChecks },
+  ];
+  const defaultGroup = sectioned
+    ? "sections"
+    : view === "today"
+      ? "today"
+      : view === "upcoming"
+        ? "upcoming"
+        : "none";
+  const selectedGroupValue = params.get("group") ?? defaultGroup;
+  const selectedGroup =
+    groupOptions.find(({ value }) => value === selectedGroupValue) ??
+    groupOptions.find(({ value }) => value === "none")!;
   const quickAddForm = !showSections &&
     !["archive", "completed"].includes(view) && (
       <form
@@ -233,79 +297,78 @@ export function WorkspaceView({
                 </CollapsibleTrigger>
                 {view !== "calendar" && (
                   <>
-                    <Select
-                      value={params.get("sort") ?? "manual"}
-                      onValueChange={(value) => {
-                        if (value !== null) setParams({ sort: value });
-                      }}
-                    >
-                      <SelectTrigger
-                        aria-label="Sort tasks"
-                        className="text-muted-foreground hover:bg-muted h-7 w-auto max-w-36 border-transparent text-xs"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="manual">Manual order</SelectItem>
-                          <SelectItem value="deadline">Due date</SelectItem>
-                          <SelectItem value="schedule">
-                            Scheduled date
-                          </SelectItem>
-                          <SelectItem value="priority">Priority</SelectItem>
-                          <SelectItem value="title">Title</SelectItem>
-                          <SelectItem value="created">Newest first</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    {(!sectioned || layout !== "board") && (
-                      <Select
-                        value={
-                          params.get("group") ??
-                          (sectioned
-                            ? "sections"
-                            : view === "today"
-                              ? "today"
-                              : view === "upcoming"
-                                ? "upcoming"
-                                : "none")
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Sort tasks by ${selectedSort.label}`}
+                            className="text-muted-foreground hover:bg-muted gap-1.5 text-xs"
+                          />
                         }
-                        onValueChange={(value) => {
-                          if (value !== null) setParams({ group: value });
-                        }}
                       >
-                        <SelectTrigger
-                          aria-label="Group tasks"
-                          className="text-muted-foreground hover:bg-muted h-7 w-auto max-w-36 border-transparent text-xs"
+                        <ArrowDownWideNarrow data-icon="inline-start" />
+                        <span className="text-foreground">Sort:</span>
+                        {selectedSort.label}
+                        <ChevronDown data-icon="inline-end" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="min-w-44">
+                        <DropdownMenuGroup>
+                          <DropdownMenuRadioGroup
+                            value={selectedSort.value}
+                            onValueChange={(value) =>
+                              setParams({ sort: value })
+                            }
+                          >
+                            {sortOptions.map(({ value, label, Icon }) => (
+                              <DropdownMenuRadioItem key={value} value={value}>
+                                <Icon />
+                                {label}
+                              </DropdownMenuRadioItem>
+                            ))}
+                          </DropdownMenuRadioGroup>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {(!sectioned || layout !== "board") && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Group tasks by ${selectedGroup.label}`}
+                              className="text-muted-foreground hover:bg-muted gap-1.5 text-xs"
+                            />
+                          }
                         >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {sectioned && (
-                              <SelectItem value="sections">Sections</SelectItem>
-                            )}
-                            {view === "today" && (
-                              <SelectItem value="today">
-                                Today sections
-                              </SelectItem>
-                            )}
-                            {view === "upcoming" && (
-                              <SelectItem value="upcoming">
-                                Upcoming dates
-                              </SelectItem>
-                            )}
-                            <SelectItem value="none">No grouping</SelectItem>
-                            <SelectItem value="schedule">
-                              Scheduled date
-                            </SelectItem>
-                            <SelectItem value="deadline">Due date</SelectItem>
-                            <SelectItem value="project">Project</SelectItem>
-                            <SelectItem value="priority">Priority</SelectItem>
-                            <SelectItem value="status">Status</SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                          <Layers2 data-icon="inline-start" />
+                          <span className="text-foreground">Group:</span>
+                          {selectedGroup.label}
+                          <ChevronDown data-icon="inline-end" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="min-w-44">
+                          <DropdownMenuGroup>
+                            <DropdownMenuRadioGroup
+                              value={selectedGroup.value}
+                              onValueChange={(value) =>
+                                setParams({ group: value })
+                              }
+                            >
+                              {groupOptions.map(({ value, label, Icon }) => (
+                                <DropdownMenuRadioItem
+                                  key={value}
+                                  value={value}
+                                >
+                                  <Icon />
+                                  {label}
+                                </DropdownMenuRadioItem>
+                              ))}
+                            </DropdownMenuRadioGroup>
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     )}
                   </>
                 )}
