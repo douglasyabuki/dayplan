@@ -58,7 +58,7 @@ export function WorkspaceSidebar({
 }) {
   const { state, today } = useWorkspace();
   const { open: sidebarOpen, isMobile } = useSidebar();
-  const { setSettings } = useWorkspaceController();
+  const { settings, openSettings } = useWorkspaceController();
   const open = tasks.filter((t) => !t.completed && !t.archived);
   const counts: Record<string, number> = {
     today: open.filter(
@@ -91,7 +91,8 @@ export function WorkspaceSidebar({
                   />
                 }
                 isActive={view === "projects" && selectedId === project.id}
-                className="min-h-9 rounded-lg px-3 pr-9 text-[13px]"
+                size="nav"
+                className="pr-9"
               >
                 <Folder
                   className="size-4 shrink-0 text-(--entity-color)"
@@ -120,16 +121,14 @@ export function WorkspaceSidebar({
   return (
     <BaseSidebar
       collapsible="offcanvas"
+      mobileFinalFocus={() => (settings ? false : true)}
       className="absolute h-full"
       inert={!isMobile && !sidebarOpen}
       aria-hidden={!isMobile && !sidebarOpen}
     >
       <div className="flex h-full min-h-0 min-w-0">
         {isMobile && (
-          <WorkspaceUtilityRail
-            settings={() => setSettings(true)}
-            close={close}
-          />
+          <WorkspaceUtilityRail settings={openSettings} close={close} />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <SidebarHeader className="sidebar-brand shrink-0 p-0">
@@ -163,7 +162,7 @@ export function WorkspaceSidebar({
                             />
                           }
                           isActive={view === item.id}
-                          className="min-h-9 rounded-lg px-3 text-[13px]"
+                          size="nav"
                         >
                           <item.icon />
                           <span>{item.label}</span>
@@ -256,7 +255,7 @@ export function WorkspaceSidebar({
                     />
                   }
                   isActive={view === "completed"}
-                  className="min-h-9 rounded-lg px-3 text-[13px]"
+                  size="nav"
                 >
                   <CheckCheck />
                   <span>Completed</span>
@@ -271,7 +270,7 @@ export function WorkspaceSidebar({
                     />
                   }
                   isActive={view === "archive"}
-                  className="min-h-9 rounded-lg px-3 text-[13px]"
+                  size="nav"
                 >
                   <Archive />
                   <span>Archive</span>

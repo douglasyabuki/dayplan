@@ -2,31 +2,23 @@
 
 import { Monitor, Moon, Search, Sun } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 
+import { AccountAvatar } from "@/components/account/account-avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { workspaceHref } from "@/lib/workspace/routes";
+import { useAccount } from "@/stores/account/provider";
 import { useWorkspace } from "@/stores/workspace/provider";
-
-import { Avatar, AvatarFallback } from "../ui/avatar";
+import type { SettingsPanel } from "@/types-and-constants/settings";
 
 export function WorkspaceUtilityRail({
   settings,
   close,
 }: {
-  settings: () => void;
+  settings: (panel: SettingsPanel, trigger: HTMLElement) => void;
   close?: () => void;
 }) {
-  const { state, act } = useWorkspace();
-  const [appearance, setAppearance] = useState(false);
+  const { state } = useWorkspace();
+  const { profile } = useAccount();
   const ThemeIcon =
     state.theme === "dark" ? Moon : state.theme === "light" ? Sun : Monitor;
   return (
@@ -37,18 +29,15 @@ export function WorkspaceUtilityRail({
       <Button
         variant="ghost"
         size="icon"
-        aria-label="Account and workspace settings"
-        title="My workspace"
-        onClick={() => {
+        aria-label={`Account and workspace settings for ${profile.name}`}
+        aria-haspopup="dialog"
+        title="Account settings"
+        onClick={(event) => {
+          settings("account", event.currentTarget);
           close?.();
-          settings();
         }}
       >
-        <Avatar>
-          <AvatarFallback className="bg-accent text-accent-foreground text-xs">
-            Y
-          </AvatarFallback>
-        </Avatar>
+        <AccountAvatar />
       </Button>
       <Button
         variant="ghost"
@@ -68,45 +57,14 @@ export function WorkspaceUtilityRail({
         size="icon"
         aria-label={`Theme: ${state.theme}`}
         title="Choose theme"
-        onClick={() => setAppearance(true)}
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          settings("appearance", event.currentTarget);
+          close?.();
+        }}
       >
         <ThemeIcon />
       </Button>
-      <Dialog open={appearance} onOpenChange={setAppearance}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Appearance</DialogTitle>
-            <DialogDescription>
-              Choose a theme for your workspace.
-            </DialogDescription>
-          </DialogHeader>
-          <ToggleGroup
-            aria-label="Theme"
-            value={[state.theme]}
-            variant="outline"
-            onValueChange={(values) => {
-              if (values[0])
-                act({
-                  type: "theme",
-                  theme: values[0] as typeof state.theme,
-                });
-            }}
-          >
-            <ToggleGroupItem value="dark">
-              <Moon />
-              Dark
-            </ToggleGroupItem>
-            <ToggleGroupItem value="light">
-              <Sun />
-              Light
-            </ToggleGroupItem>
-            <ToggleGroupItem value="system">
-              <Monitor />
-              System
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </DialogContent>
-      </Dialog>
     </nav>
   );
 }

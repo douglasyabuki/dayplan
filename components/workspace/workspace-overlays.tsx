@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { ProjectDialog } from "@/components/projects/project-dialog";
 import { SectionDialog } from "@/components/sections/section-dialog";
+import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { TagDialog } from "@/components/tags/tag-dialog";
 import { TaskEditor } from "@/components/tasks/editor/task-editor";
 import { TaskDragSnapshot } from "@/components/tasks/task-drag-feedback";
@@ -17,8 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 
 export function WorkspaceOverlays() {
@@ -26,10 +25,9 @@ export function WorkspaceOverlays() {
   const {
     state,
     dragSnapshot,
-    act,
-    reset,
     settings,
     setSettings,
+    settingsReturnFocus,
     entity,
     setEntity,
     tagExpansion,
@@ -110,52 +108,13 @@ export function WorkspaceOverlays() {
           close={() => setEntity(null)}
         />
       )}
-      <Dialog open={settings} onOpenChange={setSettings}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Your workspace</DialogTitle>
-            <DialogDescription>
-              A little space that feels like you.
-            </DialogDescription>
-          </DialogHeader>
-          <FieldGroup>
-            <Field>
-              <FieldLabel>Appearance</FieldLabel>
-              <ToggleGroup
-                value={[state.theme]}
-                onValueChange={(values) => {
-                  if (values[0])
-                    act({
-                      type: "theme",
-                      theme: values[0] as typeof state.theme,
-                    });
-                }}
-                variant="outline"
-              >
-                {["system", "light", "dark"].map((t) => (
-                  <ToggleGroupItem key={t} value={t} className="capitalize">
-                    {t}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </Field>
-            <p className="text-muted-foreground text-sm">
-              Timezone: {state.timezone.replaceAll("_", " ")}
-              <br />
-              Your workspace is saved in this browser.
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSettings(false);
-                reset();
-              }}
-            >
-              Reset to sample data
-            </Button>
-          </FieldGroup>
-        </DialogContent>
-      </Dialog>
+      {settings && (
+        <SettingsDialog
+          initialPanel={settings}
+          returnFocus={settingsReturnFocus}
+          onClose={() => setSettings(null)}
+        />
+      )}
       <DragOverlay dropAnimation={null}>
         {(source) =>
           dragSnapshot ? (

@@ -40,11 +40,11 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
 }
 
 function WorkspaceLayout({ children }: { children: ReactNode }) {
-  const { setSettings } = useWorkspaceController();
+  const { openSettings } = useWorkspaceController();
   return (
     <div className="flex h-dvh overflow-hidden">
       <div className="hidden shrink-0 md:flex">
-        <WorkspaceUtilityRail settings={() => setSettings(true)} />
+        <WorkspaceUtilityRail settings={openSettings} />
       </div>
       <SidebarProvider
         className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
@@ -78,6 +78,7 @@ function WorkspaceFrame({ children }: { children: ReactNode }) {
         <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b px-5 text-xs md:px-9">
           <div className="flex min-w-0 items-center gap-2">
             <SidebarTrigger
+              data-workspace-sidebar-trigger
               size="icon"
               className="-ml-3 md:-ml-5"
               aria-label={sidebarLabel}
