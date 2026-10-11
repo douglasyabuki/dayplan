@@ -15,6 +15,7 @@ import {
 } from "@/components/tasks/task-interaction";
 import { Popover, PopoverContent, PopoverTitle } from "@/components/ui/popover";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
+import type { TaskScope } from "@/lib/tasks/operations";
 import { reference, resolveOccurrence } from "@/lib/tasks/recurrence";
 import { cn } from "@/lib/utils";
 import { taskDraftAction } from "@/stores/workspace/commands";

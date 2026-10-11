@@ -5,6 +5,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { Toaster } from "@/components/ui/toast";
+import { OnboardingProvider } from "@/stores/onboarding/provider";
+import { SessionProvider } from "@/stores/session/provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,7 +42,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </script>
       </head>
       <body className="app-scrollbar flex min-h-full flex-col">
-        {children}
+        <SessionProvider>
+          <OnboardingProvider>{children}</OnboardingProvider>
+        </SessionProvider>
         <Toaster />
       </body>
     </html>

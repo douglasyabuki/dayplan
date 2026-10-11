@@ -2,6 +2,9 @@ import { expect, type Page, test } from "@playwright/test";
 
 const key = "dayplan.workspace.v2";
 async function seed(page: Page, legacy = false) {
+  await page.addInitScript(() =>
+    localStorage.setItem("dayplan.onboarding.v1", "complete"),
+  );
   await page.addInitScript(
     ({ key, legacy }) => {
       if (sessionStorage.getItem("tags-seeded")) return;

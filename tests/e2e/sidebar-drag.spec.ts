@@ -1,6 +1,9 @@
 import { expect, type Page, test } from "@playwright/test";
 
 async function seed(page: Page, board = false, projectCount = 1, tagCount = 0) {
+  await page.addInitScript(() =>
+    localStorage.setItem("dayplan.onboarding.v1", "complete"),
+  );
   await page.addInitScript(
     ({ board, projectCount, tagCount }) =>
       localStorage.setItem(

@@ -3,7 +3,10 @@ import { render } from "vitest-browser-react";
 
 import { newTask } from "@/lib/tasks/factory";
 import { seedWorkspace } from "@/lib/workspace/seed";
-import { STORAGE_KEY } from "@/stores/workspace/persistence";
+import {
+  guestWorkspaceDataSource,
+  STORAGE_KEY,
+} from "@/stores/workspace/persistence";
 import { useWorkspace, WorkspaceProvider } from "@/stores/workspace/provider";
 
 function Harness() {
@@ -68,7 +71,7 @@ afterEach(() => {
 test("failed and no-op operations preserve the successful Undo snapshot", async () => {
   const original = seed();
   const screen = await render(
-    <WorkspaceProvider>
+    <WorkspaceProvider dataSource={guestWorkspaceDataSource}>
       <Harness />
     </WorkspaceProvider>,
   );
@@ -97,7 +100,7 @@ test("failed and no-op operations preserve the successful Undo snapshot", async 
 test("deletion persists one complete snapshot and Undo restores it", async () => {
   const original = seed();
   const screen = await render(
-    <WorkspaceProvider>
+    <WorkspaceProvider dataSource={guestWorkspaceDataSource}>
       <Harness />
     </WorkspaceProvider>,
   );
@@ -120,7 +123,7 @@ test("deletion persists one complete snapshot and Undo restores it", async () =>
 test("write failure preserves in-memory mutation and Undo", async () => {
   const original = seed();
   const screen = await render(
-    <WorkspaceProvider>
+    <WorkspaceProvider dataSource={guestWorkspaceDataSource}>
       <Harness />
     </WorkspaceProvider>,
   );

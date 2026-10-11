@@ -14,6 +14,9 @@ async function stored(page: Page) {
 }
 async function seed(page: Page, board: boolean) {
   await page.setViewportSize({ width: 1400, height: 1100 });
+  await page.addInitScript(() =>
+    localStorage.setItem("dayplan.onboarding.v1", "complete"),
+  );
   await page.addInitScript(
     ({ key, board }) => {
       if (sessionStorage.getItem("status-seeded")) return;

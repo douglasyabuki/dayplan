@@ -1,10 +1,9 @@
 export type AccountProfile = {
   name: string;
-  email: string;
+  email?: string;
   avatarUrl?: string;
 };
 
-export const mockAccount: AccountProfile = {
-  name: "Yuji",
-  email: "yuji@example.com",
-};
+export const guestProfile: AccountProfile = { name: "Guest" };
+
+export type ProfileUpdateStatus = "idle" | "pending" | "success" | "error";

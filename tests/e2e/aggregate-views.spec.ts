@@ -18,6 +18,9 @@ async function seed(
 ) {
   await page.setViewportSize({ width: 1500, height: 1100 });
   await page.clock.setFixedTime(new Date("2026-10-10T12:00:00Z"));
+  await page.addInitScript(() =>
+    localStorage.setItem("dayplan.onboarding.v1", "complete"),
+  );
   await page.addInitScript(
     ({ key, board, inboxOverdue }) => {
       if (sessionStorage.getItem("aggregate-seeded")) return;

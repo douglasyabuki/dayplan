@@ -1,7 +1,13 @@
 "use client";
 
 import { Camera } from "lucide-react";
-import { type Ref, useImperativeHandle, useRef, useState } from "react";
+import {
+  type Ref,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -21,22 +27,53 @@ import { AccountAvatar } from "./account-avatar";
 export type AccountEditHandle = { commit: () => void; cancel: () => void };
 
 export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
-  const { profile, ready, storageError, updateName } = useAccount();
+  const {
+    profile,
+    ready,
+    storageError,
+    updateName,
+    updateStatus,
+    updateError,
+    capabilities,
+  } = useAccount();
   const [draft, setDraft] = useState(profile.name);
   const [error, setError] = useState(false);
   const [saved, setSaved] = useState(false);
   const value = useRef(profile.name);
   const lastSaved = useRef(profile.name);
   const cancelled = useRef(false);
+  const active = useRef(false);
+  const request = useRef(0);
+  const committing = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      request.current += 1;
+    };
+  }, []);
 
-  function commit() {
-    if (cancelled.current || !ready) return;
+  async function commit() {
+    if (
+      cancelled.current ||
+      !ready ||
+      committing.current ||
+      updateStatus === "pending"
+    )
+      return;
     const name = value.current.trim();
     if (!name) {
       setError(true);
       return;
     }
-    if (name !== lastSaved.current && updateName(name)) {
+    if (name !== lastSaved.current) {
+      const id = ++request.current;
+      committing.current = true;
+      const success = await updateName(name);
+      committing.current = false;
+      if (!active.current || id !== request.current || cancelled.current)
+        return;
+      if (!success) return;
       lastSaved.current = name;
       setSaved(true);
     }
@@ -48,6 +85,7 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
   function cancel() {
     // Set the guard synchronously: closing the dialog may cause an input blur.
     cancelled.current = true;
+    request.current += 1;
     value.current = lastSaved.current;
     setDraft(lastSaved.current);
     setError(false);
@@ -85,15 +123,18 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
         </div>
       </div>
       <FieldGroup>
-        <Field data-invalid={error} data-disabled={!ready}>
+        <Field
+          data-invalid={error || !!updateError}
+          data-disabled={!ready || updateStatus === "pending"}
+        >
           <FieldLabel htmlFor="account-name">Name</FieldLabel>
           <Input
             id="account-name"
             value={draft}
-            disabled={!ready}
-            aria-invalid={error}
+            disabled={!ready || updateStatus === "pending"}
+            aria-invalid={error || !!updateError}
             aria-describedby={
-              error ? "account-name-error" : "account-name-help"
+              error || updateError ? "account-name-error" : "account-name-help"
             }
             onChange={(event) => {
               cancelled.current = false;
@@ -112,33 +153,43 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
               }
             }}
           />
-          {error ? (
-            <FieldError id="account-name-error">Enter a name.</FieldError>
+          {error || updateError ? (
+            <FieldError id="account-name-error">
+              {updateError || "Enter a name."}
+            </FieldError>
           ) : (
             <FieldDescription id="account-name-help">
               Saved automatically when you leave this field.
             </FieldDescription>
           )}
           <p role="status" className="text-muted-foreground min-h-4 text-xs">
-            {saved
-              ? storageError
-                ? "Updated for this session."
-                : "Name saved."
-              : ""}
+            {updateStatus === "pending"
+              ? "Saving name…"
+              : saved
+                ? storageError
+                  ? "Updated for this session."
+                  : "Name saved."
+                : ""}
           </p>
         </Field>
         <Field>
           <FieldLabel>Email</FieldLabel>
-          <p className="text-sm break-all">{profile.email}</p>
+          <p className="text-sm break-all">
+            {capabilities.hasAccount
+              ? profile.email
+              : "No account-associated email"}
+          </p>
           <FieldDescription>
-            This is a mock account stored in this browser.
+            {capabilities.hasAccount
+              ? "Your account profile."
+              : "Your guest profile and workspace are saved in this browser. Account access is coming later."}
           </FieldDescription>
         </Field>
       </FieldGroup>
       {storageError && (
         <Alert>
           <AlertDescription>
-            Your browser could not save account changes. Changes remain
+            Your browser could not save guest profile changes. Changes remain
             available in this session.
           </AlertDescription>
         </Alert>
@@ -147,7 +198,11 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Password</p>
-          <p className="text-muted-foreground text-sm">Not available yet</p>
+          <p className="text-muted-foreground text-sm">
+            {capabilities.hasAccount
+              ? "Not available yet"
+              : "Requires an account. Account access is coming later."}
+          </p>
         </div>
         <Button variant="outline" disabled>
           Change password
@@ -157,7 +212,11 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-destructive text-sm font-medium">Delete account</p>
-          <p className="text-muted-foreground text-sm">Not available yet</p>
+          <p className="text-muted-foreground text-sm">
+            {capabilities.hasAccount
+              ? "Not available yet"
+              : "Guests have no account to delete. Account access is coming later."}
+          </p>
         </div>
         <Button variant="destructive" disabled>
           Delete account

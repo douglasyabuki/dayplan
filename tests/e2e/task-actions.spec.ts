@@ -22,6 +22,9 @@ async function seed(
   board = false,
   tasks: object[] = [baseTask("a", 0), baseTask("b", 1)],
 ) {
+  await page.addInitScript(() =>
+    localStorage.setItem("dayplan.onboarding.v1", "complete"),
+  );
   await page.addInitScript(
     ({ key, tasks, board }) => {
       if (!sessionStorage.getItem("test-seeded")) {

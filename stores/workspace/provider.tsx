@@ -16,7 +16,8 @@ import { type TaskOperation } from "@/lib/tasks/operations";
 import { seedWorkspace } from "@/lib/workspace/seed";
 import { type Action } from "@/stores/workspace/actions";
 import { taskAction, taskOperationAction } from "@/stores/workspace/commands";
-import { readWorkspace, writeWorkspace } from "@/stores/workspace/persistence";
+import type { WorkspaceDataSource } from "@/stores/workspace/data-source";
+import { WorkspacePersistenceSession } from "@/stores/workspace/persistence-session";
 import { reducer } from "@/stores/workspace/reducer";
 import type { Occurrence } from "@/types-and-constants/tasks";
 import type { Workspace } from "@/types-and-constants/workspace";
@@ -66,17 +67,26 @@ const initial: Workspace = {
   theme: "system",
 };
 
-export function WorkspaceProvider({ children }: { children: ReactNode }) {
+export function WorkspaceProvider({
+  children,
+  dataSource,
+}: {
+  children: ReactNode;
+  dataSource: WorkspaceDataSource;
+}) {
   const [state, dispatch] = useReducer(reducer, initial);
   const current = useRef(initial);
   const [operationError, setOperationError] = useState("");
+  const persistence = useRef<WorkspacePersistenceSession | null>(null);
+  const revision = useRef(0);
   function commit(next: Workspace) {
+    if (!persistence.current?.active) return;
+    revision.current += 1;
     current.current = next;
     dispatch({ type: "replace", state: next });
   }
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
-  const writable = useRef(false);
   const [notice, setNotice] = useState<{
     message: string;
     before: Workspace;
@@ -85,36 +95,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [today, setToday] = useState("");
 
   useEffect(() => {
-    try {
-      const restored = readWorkspace() ?? seedWorkspace();
-      commit(restored);
-      writable.current = true;
-    } catch (cause) {
-      // Browser storage is an external system; surface its hydration failure before enabling writes.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Storage is unavailable. Changes will stay in this session.",
-      );
-      commit(seedWorkspace());
-    }
-    setReady(true);
-  }, []);
+    const scope = new WorkspacePersistenceSession(dataSource, setError);
+    persistence.current = scope;
+    scope.load(
+      (restored) => {
+        commit(restored ?? seedWorkspace());
+        setReady(true);
+      },
+      (cause) => {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Storage is unavailable. Changes will stay in this session.",
+        );
+        commit(seedWorkspace());
+        setReady(true);
+      },
+    );
+    return () => scope.close();
+  }, [dataSource]);
   useEffect(() => {
-    if (!ready || !writable.current) return;
-    // Report a failed external storage write while retaining the in-memory workspace.
-
-    try {
-      writeWorkspace(state);
-    } catch {
-      writable.current = false;
-      // This effect reports a failure from the external storage write above.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setError(
-        "Your browser could not save changes. Your current work is still available in this session.",
-      );
-    }
+    if (ready) persistence.current?.saveLatest(state);
   }, [state, ready]);
   useEffect(() => {
     const update = () => setToday(dateKey(new Date(), state.timezone));
@@ -142,6 +143,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       actionProps: {
         children: "Undo",
         onClick: () => {
+          if (!persistence.current?.active) return;
           commit(notice.before);
           setOperationError("");
           setNotice(null);
@@ -149,6 +151,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         },
       },
       onClose: () => {
+        if (!persistence.current?.active) return;
         setNotice((currentNotice) =>
           currentNotice === notice ? null : currentNotice,
         );
@@ -157,6 +160,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => toast.close(id);
   }, [notice]);
   function act(action: Action, message?: string) {
+    if (!persistence.current?.active || !ready) return false;
     try {
       const before = current.current;
       const next = reducer(before, taskAction(before, action));
@@ -173,7 +177,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }
   function operate(operation: TaskOperation, message?: string) {
-    act(taskOperationAction(state, operation), message);
+    if (!persistence.current?.active) return;
+    act(taskOperationAction(current.current, operation), message);
   }
   function save(task: Occurrence, message?: string) {
     act({ type: "occurrence", task }, message);
@@ -190,21 +195,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     );
   }
   function reset() {
+    if (!persistence.current?.active || !ready) return;
     setConfirmation({
       title: "Reset your workspace?",
       description:
         "This replaces your tasks, projects, and tags with fresh sample data in this browser.",
       action: () => {
+        const scope = persistence.current;
+        if (!scope?.active) return;
         const fresh = seedWorkspace();
-        try {
-          writeWorkspace(fresh);
-          writable.current = true;
+        const before = revision.current;
+        scope.reset(fresh, () => {
           setError("");
-          commit(fresh);
-          setNotice(null);
-        } catch {
-          setError("Storage is still unavailable. Reset was not saved.");
-        }
+          if (revision.current !== before) {
+            scope.saveLatest(current.current);
+            setOperationError(
+              "Your workspace changed while resetting. Your edits were kept; try reset again.",
+            );
+          } else {
+            commit(fresh);
+            setNotice(null);
+          }
+        });
       },
     });
   }
@@ -213,7 +225,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         operationError,
-        dismissOperationError: () => setOperationError(""),
+        dismissOperationError: () => {
+          if (persistence.current?.active) setOperationError("");
+        },
         today,
         storageError: !!error,
         ready: ready && !!today,
@@ -221,20 +235,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         notice,
         confirmation,
         undo: () => {
-          if (!notice) return;
+          if (!notice || !persistence.current?.active) return;
           commit(notice.before);
           setOperationError("");
           setNotice(null);
         },
-        dismissNotice: () => setNotice(null),
-        cancelConfirmation: () => setConfirmation(null),
+        dismissNotice: () => {
+          if (persistence.current?.active) setNotice(null);
+        },
+        cancelConfirmation: () => {
+          if (persistence.current?.active) setConfirmation(null);
+        },
         setConfirmationChoice: (value) =>
+          persistence.current?.active &&
           setConfirmation((current) =>
             current?.choice
               ? { ...current, choice: { ...current.choice, value } }
               : current,
           ),
         acceptConfirmation: () => {
+          if (!persistence.current?.active) return;
           confirmation?.action(confirmation.choice?.value);
           setConfirmation(null);
         },
@@ -242,7 +262,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         operate,
         save,
         toggle,
-        confirm: setConfirmation,
+        confirm: (value) => {
+          if (persistence.current?.active) setConfirmation(value);
+        },
         reset,
       }}
     >

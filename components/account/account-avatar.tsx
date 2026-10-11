@@ -10,7 +10,7 @@ export function AccountAvatar({ className }: { className?: string }) {
       new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(
         profile.name,
       ),
-    )[0]?.segment ?? "Y";
+    )[0]?.segment ?? "G";
   return (
     <Avatar className={className} aria-label={`${profile.name}'s avatar`}>
       {profile.avatarUrl && (

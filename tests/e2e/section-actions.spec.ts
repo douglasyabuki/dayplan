@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 
 const key = "dayplan.workspace.v2";
 async function seed(page: import("@playwright/test").Page, board: boolean) {
+  await page.addInitScript(() =>
+    localStorage.setItem("dayplan.onboarding.v1", "complete"),
+  );
   await page.addInitScript(
     ({ key, board }) => {
       if (!sessionStorage.getItem("section-test-seeded")) {
