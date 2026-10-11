@@ -54,6 +54,7 @@ function useSidebar() {
 }
 
 function SidebarProvider({
+  keyboardShortcut = true,
   defaultOpen = true,
   open: openProp,
   onOpenChange: setOpenProp,
@@ -63,6 +64,7 @@ function SidebarProvider({
   ...props
 }: React.ComponentProps<"div"> & {
   defaultOpen?: boolean;
+  keyboardShortcut?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -95,6 +97,7 @@ function SidebarProvider({
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
+    if (!keyboardShortcut) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
@@ -107,7 +110,7 @@ function SidebarProvider({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar]);
+  }, [toggleSidebar, keyboardShortcut]);
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
@@ -153,6 +156,7 @@ function Sidebar({
   side = "left",
   variant = "sidebar",
   collapsible = "offcanvas",
+  mobileFinalFocus,
   className,
   children,
   dir,
@@ -161,6 +165,7 @@ function Sidebar({
   side?: "left" | "right";
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
+  mobileFinalFocus?: React.ComponentProps<typeof SheetContent>["finalFocus"];
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
 
@@ -183,6 +188,7 @@ function Sidebar({
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
+          finalFocus={mobileFinalFocus}
           dir={dir}
           data-sidebar="sidebar"
           data-slot="sidebar"
@@ -485,6 +491,7 @@ const sidebarMenuButtonVariants = cva(
       },
       size: {
         default: "h-8 text-sm",
+        nav: "h-9 min-h-9 rounded-lg px-3 text-[13px]",
         sm: "h-7 text-xs",
         lg: "h-12 text-sm group-data-[collapsible=icon]:p-0!",
       },

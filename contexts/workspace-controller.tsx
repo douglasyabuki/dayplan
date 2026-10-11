@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, type ReactNode, useContext, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useRef,
+  useState,
+} from "react";
 
 import { TaskQuickActionPopover } from "@/components/tasks/controls/task-quick-actions";
 import { useWorkspaceDrag } from "@/hooks/workspace/use-workspace-drag";
@@ -11,6 +17,7 @@ import { useWorkspaceView } from "@/hooks/workspace/use-workspace-view";
 import { useWorkspace } from "@/stores/workspace/provider";
 import type { Project } from "@/types-and-constants/projects";
 import type { Section } from "@/types-and-constants/sections";
+import type { SettingsPanel } from "@/types-and-constants/settings";
 import type { Tag } from "@/types-and-constants/tags";
 
 type CollectionDialogState =
@@ -42,7 +49,12 @@ function useControllerState() {
   });
 
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [settings, setSettings] = useState(false);
+  const [settings, setSettings] = useState<SettingsPanel | null>(null);
+  const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  function openSettings(panel: SettingsPanel, trigger: HTMLElement) {
+    settingsReturnFocus.current = trigger;
+    setSettings(panel);
+  }
   const [entity, setEntity] = useState<CollectionDialogState | null>(null);
   const [sectionDialog, setSectionDialog] = useState<{
     section?: Section;
@@ -103,6 +115,8 @@ function useControllerState() {
     setFiltersOpen,
     settings,
     setSettings,
+    openSettings,
+    settingsReturnFocus,
     entity,
     setEntity,
     sectionDialog,
