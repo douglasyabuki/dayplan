@@ -1,5 +1,6 @@
 "use client";
 
+import { EditorSelect } from "@/components/tasks/controls/task-property-controls";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,7 @@ export function WorkspaceFeedback() {
     confirmation,
     reset,
     cancelConfirmation,
+    setConfirmationChoice,
     acceptConfirmation,
   } = useWorkspace();
 
@@ -65,6 +67,14 @@ export function WorkspaceFeedback() {
             <DialogTitle>{confirmation?.title}</DialogTitle>
             <DialogDescription>{confirmation?.description}</DialogDescription>
           </DialogHeader>
+          {confirmation?.choice && (
+            <EditorSelect
+              label={confirmation.choice.label}
+              value={confirmation.choice.value}
+              onChange={setConfirmationChoice}
+              options={confirmation.choice.options}
+            />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={cancelConfirmation}>
               Cancel

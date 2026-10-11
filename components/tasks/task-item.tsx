@@ -61,6 +61,7 @@ import {
 import { PopoverTrigger } from "@/components/ui/popover";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { taskIndex } from "@/lib/tasks/hierarchy";
+import { type TaskScope } from "@/lib/tasks/operations";
 import {
   compactTiming,
   deadlineLabel,
@@ -174,7 +175,7 @@ export function TaskItem({
 }) {
   const triggerId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const { state, operate } = useWorkspace();
+  const { state, operate, confirm } = useWorkspace();
   const cardRef = useRef<HTMLDivElement>(null);
   const mergedRef = useMergedRefs(cardRef, itemRef);
   const controller = useWorkspaceController();
@@ -188,6 +189,35 @@ export function TaskItem({
   const menuAction = (kind: QuickActionKind) => {
     if (cardRef.current)
       controller.showQuickAction(task, kind, cardRef.current);
+  };
+  const deleteTask = () => {
+    confirm({
+      title: task.context
+        ? "Delete this task?"
+        : "Delete this task and its subtasks?",
+      description: task.context
+        ? "Deletion includes subtasks within the selected scope. Other occurrences remain when you delete this occurrence. You can Undo this action."
+        : "This removes the selected template subtree, including descendant series and their occurrences. You can Undo this action.",
+      ...(task.context && {
+        choice: {
+          label: "Delete scope",
+          value: "occurrence",
+          options: [
+            { value: "occurrence", label: "This occurrence" },
+            { value: "series", label: "Entire series" },
+          ],
+        },
+      }),
+      action: (choice) =>
+        operate(
+          {
+            kind: "delete",
+            task,
+            scope: (choice as TaskScope | undefined) ?? "occurrence",
+          },
+          "Task deleted",
+        ),
+    });
   };
   const hierarchical = ["inbox", "projects", "tasks"].includes(controller.view);
   const allChildren = occurrenceChildren(state, task, controller.allTasks);
@@ -800,12 +830,9 @@ export function TaskItem({
         </ContextMenuGroup>
         <ContextMenuSeparator />
         <ContextMenuGroup>
-          <ContextMenuItem
-            variant="destructive"
-            onClick={() => menuAction("delete")}
-          >
+          <ContextMenuItem variant="destructive" onClick={deleteTask}>
             <Trash2 />
-            Delete...
+            Delete
           </ContextMenuItem>
         </ContextMenuGroup>
       </ContextMenuContent>

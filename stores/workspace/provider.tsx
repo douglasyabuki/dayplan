@@ -21,7 +21,16 @@ import { reducer } from "@/stores/workspace/reducer";
 import type { Occurrence } from "@/types-and-constants/tasks";
 import type { Workspace } from "@/types-and-constants/workspace";
 
-type Confirmation = { title: string; description: string; action: () => void };
+type Confirmation = {
+  title: string;
+  description: string;
+  action: (choice?: string) => void;
+  choice?: {
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+  };
+};
 type Context = {
   state: Workspace;
   today: string;
@@ -33,6 +42,7 @@ type Context = {
   undo: () => void;
   dismissNotice: () => void;
   cancelConfirmation: () => void;
+  setConfirmationChoice: (value: string) => void;
   acceptConfirmation: () => void;
   act: (action: Action, message?: string) => boolean;
   operationError: string;
@@ -218,8 +228,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         },
         dismissNotice: () => setNotice(null),
         cancelConfirmation: () => setConfirmation(null),
+        setConfirmationChoice: (value) =>
+          setConfirmation((current) =>
+            current?.choice
+              ? { ...current, choice: { ...current.choice, value } }
+              : current,
+          ),
         acceptConfirmation: () => {
-          confirmation?.action();
+          confirmation?.action(confirmation.choice?.value);
           setConfirmation(null);
         },
         act,

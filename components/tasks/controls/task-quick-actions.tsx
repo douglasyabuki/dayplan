@@ -13,10 +13,8 @@ import {
   metadataClass,
   taskInteractionBoundary,
 } from "@/components/tasks/task-interaction";
-import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle } from "@/components/ui/popover";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
-import { type TaskScope } from "@/lib/tasks/operations";
 import { reference, resolveOccurrence } from "@/lib/tasks/recurrence";
 import { cn } from "@/lib/utils";
 import { taskDraftAction } from "@/stores/workspace/commands";
@@ -24,14 +22,13 @@ import { useWorkspace } from "@/stores/workspace/provider";
 import type { Occurrence } from "@/types-and-constants/tasks";
 
 export type QuickActionKind =
-  "priority" | "deadline" | "schedule" | "tags" | "location" | "delete";
+  "priority" | "deadline" | "schedule" | "tags" | "location";
 const titles: Record<QuickActionKind, string> = {
   priority: "Priority",
   deadline: "Deadline",
   schedule: "Scheduled work",
   tags: "Tags",
   location: "Move to",
-  delete: "Delete task",
 };
 
 export function TaskMetadataButton({
@@ -96,21 +93,6 @@ export function TaskQuickActionPopover({
         cause instanceof Error ? cause.message : "Unable to update task.",
       );
     }
-  }
-  function remove() {
-    close();
-    workspace.confirm({
-      title:
-        task.context && scope === "series"
-          ? "Delete this series and its subtasks?"
-          : "Delete this task and its subtasks?",
-      description:
-        task.context && scope === "occurrence"
-          ? "This removes this occurrence and its occurrence subtree. Other occurrences remain. You can Undo this action."
-          : "This removes the selected template subtree, including descendant series and their occurrences. You can Undo this action.",
-      action: () =>
-        workspace.operate({ kind: "delete", task, scope }, "Task deleted"),
-    });
   }
   return (
     <Popover
@@ -180,18 +162,6 @@ export function TaskQuickActionPopover({
             patch={patch}
             state={workspace.state}
           />
-        )}
-        {action.kind === "delete" && (
-          <>
-            <p className="text-muted-foreground text-sm">
-              Deletion includes subtasks within the selected scope. A
-              confirmation follows; Undo is available after deleting.
-            </p>
-            <Button variant="destructive" onClick={remove}>
-              Delete{" "}
-              {task.context && scope === "series" ? "entire series" : "task"}…
-            </Button>
-          </>
         )}
         {error && (
           <p role="alert" className="text-destructive text-sm">

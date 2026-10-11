@@ -335,10 +335,7 @@ test("archive preserves independently archived children and scoped delete suppor
   await page.locator('a[href="/inbox"]').click();
   await card(page).click({ button: "right" });
   await menu(page)
-    .getByRole("menuitem", { name: "Delete...", exact: true })
-    .click();
-  await popup(page)
-    .getByRole("button", { name: /Delete task/ })
+    .getByRole("menuitem", { name: "Delete", exact: true })
     .click();
   await expect(
     page.getByRole("dialog", { name: "Delete this task and its subtasks?" }),
