@@ -1,7 +1,5 @@
 "use client";
 
-import { Check, X } from "lucide-react";
-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,11 +17,8 @@ export function WorkspaceFeedback() {
     error,
     operationError,
     dismissOperationError,
-    notice,
     confirmation,
     reset,
-    undo,
-    dismissNotice,
     cancelConfirmation,
     acceptConfirmation,
   } = useWorkspace();
@@ -58,26 +53,6 @@ export function WorkspaceFeedback() {
             </Button>
           </div>
         </Alert>
-      )}
-      {notice && (
-        <div
-          className="bg-popover fixed bottom-6 left-1/2 z-60 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl border px-4 py-2 text-xs shadow-lg [&>span]:min-w-0"
-          role="status"
-        >
-          <Check className="text-primary size-4" />
-          <span>{notice.message}</span>
-          <Button variant="ghost" onClick={undo}>
-            Undo
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Dismiss notification"
-            onClick={dismissNotice}
-          >
-            <X />
-          </Button>
-        </div>
       )}
       <Dialog
         open={!!confirmation}

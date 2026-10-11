@@ -13,6 +13,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { formatDate } from "@/lib/dates";
+import { isAggregateView } from "@/lib/workspace/grouping";
 
 export function WorkspaceHeader() {
   const {
@@ -75,50 +76,57 @@ export function WorkspaceHeader() {
               </ToggleGroupItem>
             </ToggleGroup>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Page actions"
-                />
-              }
-            >
-              <MoreHorizontal />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuGroup>
-                <DropdownMenuItem onClick={() => create()}>
-                  <Plus />
-                  Add task
-                </DropdownMenuItem>
-                {sectioned && (
-                  <DropdownMenuItem onClick={() => setSectionDialog({})}>
+          {isAggregateView(view) ? (
+            <Button onClick={() => create()}>
+              <Plus data-icon="inline-start" />
+              Add task
+            </Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Page actions"
+                  />
+                }
+              >
+                <MoreHorizontal />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-44">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => create()}>
                     <Plus />
-                    Add section
+                    Add task
                   </DropdownMenuItem>
-                )}
-                {selectedEntity && (
-                  <DropdownMenuItem
-                    onClick={() =>
-                      setEntity(
-                        view === "tags"
-                          ? {
-                              kind: "tags",
-                              entity: tags.byId.get(selectedEntity.id),
-                            }
-                          : { kind: "projects", entity: selectedEntity },
-                      )
-                    }
-                  >
-                    <Pencil />
-                    Edit {view === "projects" ? "project" : "tag"}
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  {sectioned && (
+                    <DropdownMenuItem onClick={() => setSectionDialog({})}>
+                      <Plus />
+                      Add section
+                    </DropdownMenuItem>
+                  )}
+                  {selectedEntity && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        setEntity(
+                          view === "tags"
+                            ? {
+                                kind: "tags",
+                                entity: tags.byId.get(selectedEntity.id),
+                              }
+                            : { kind: "projects", entity: selectedEntity },
+                        )
+                      }
+                    >
+                      <Pencil />
+                      Edit {view === "projects" ? "project" : "tag"}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
       <p className="text-muted-foreground mt-1 text-xs leading-relaxed">

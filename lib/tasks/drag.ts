@@ -71,7 +71,6 @@ export function insertion(
   return { ids: next, beforeId: remaining[index], index };
 }
 export type DragDestination = {
-  kind: "section" | "task";
   intent?: "before" | "after" | "inside" | "location";
   targetId?: string;
   parentRef?: TaskReference | null;
@@ -81,7 +80,18 @@ export type DragDestination = {
   beforeId?: string;
   completed?: boolean;
   statusOnly?: boolean;
-};
+} & (
+  | { kind: "section" | "task" }
+  | {
+      kind: "aggregate-group";
+      group: Pick<
+        import("@/lib/workspace/grouping").TaskGroup,
+        "id" | "kind" | "value"
+      >;
+      chooseDate?: boolean;
+      blockedReason?: string;
+    }
+);
 
 /**
  * Applies a drag destination order to mounted sibling items.
@@ -211,7 +221,7 @@ export function dragDestination({
   projectId: string | null;
   allTasks: Occurrence[];
   visible: Occurrence[];
-  groups?: [string, Occurrence[]][];
+  groups?: import("@/lib/workspace/grouping").TaskGroup[];
   canceled?: boolean;
   previous?: DragDestination | null;
   state: Workspace;

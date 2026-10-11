@@ -151,17 +151,25 @@ test("create, move with keyboard, rename, delete and undo a complete subtree", a
   ).toBeVisible();
   const before = await stored(page);
   await action(page, "Meetings", "Delete");
-  await expect(page.getByRole("dialog")).toContainText(
-    "subtags will move to its parent",
-  );
-  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  const deleteDialog = page.getByRole("dialog", {
+    name: "Delete Meetings?",
+    exact: true,
+  });
+  await expect(deleteDialog).toContainText("subtags will move to its parent");
+  await deleteDialog
+    .getByRole("button", { name: "Confirm", exact: true })
+    .click();
   await expect(
     tree(page).getByRole("link", { name: "Home / Weekly", exact: true }),
   ).toBeVisible();
   await expect
     .poll(async () => (await stored(page)).tasks[1].tagIds)
     .toEqual([]);
-  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await page
+    .locator('[data-slot="toast"]')
+    .last()
+    .getByRole("button", { name: "Undo", exact: true })
+    .click();
   await expect.poll(() => stored(page)).toEqual(before);
   await page.reload();
   await expect(

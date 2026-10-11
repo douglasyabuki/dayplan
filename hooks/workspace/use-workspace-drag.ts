@@ -3,13 +3,25 @@
 import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/react";
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 
+import { toast } from "@/components/ui/toast";
 import { addDays } from "@/lib/dates";
 import {
   type DragDestination,
   dragDestination as resolveDragDestination,
   taskPointerIntent,
 } from "@/lib/tasks/drag";
+import {
+  type GroupDestination,
+  groupDestination,
+  groupDropAction,
+} from "@/lib/workspace/group-drag";
 import type { groupTasks } from "@/lib/workspace/grouping";
+import {
+  emptyGroupTargets,
+  isAggregateView,
+  makeGroup,
+  resolveGrouping,
+} from "@/lib/workspace/grouping";
 import { taskDropAction } from "@/stores/workspace/commands";
 import type { useWorkspace } from "@/stores/workspace/provider";
 import type { Occurrence } from "@/types-and-constants/tasks";
@@ -20,6 +32,7 @@ type WorkspaceDragOptions = Pick<
   "state" | "today" | "act" | "save"
 > & {
   params: URLSearchParams;
+  view: string;
   layout: TaskLayout;
   projectId: string | null;
   allTasks: Occurrence[];
@@ -43,6 +56,7 @@ export function useWorkspaceDrag({
   act,
   save,
   params,
+  view,
   layout,
   projectId,
   allTasks,
@@ -51,6 +65,12 @@ export function useWorkspaceDrag({
   closeTaskActions,
   setStatusCollapsed,
 }: WorkspaceDragOptions) {
+  const [pendingDateDrop, setPendingDateDrop] = useState<{
+    taskId: string;
+    destination: GroupDestination;
+  } | null>(null);
+  const [groupDropError, setGroupDropError] = useState("");
+  const dateDropReturnFocus = useRef<HTMLElement | null>(null);
   const [dragDestination, setDragDestination] =
     useState<DragDestination | null>(null);
   const [dragSnapshot, setDragSnapshot] = useState<HTMLElement | null>(null);
@@ -85,6 +105,7 @@ export function useWorkspaceDrag({
   const keyboardDirection = useRef<"before" | "after" | "inside">("after");
 
   function dragStart(event: Pick<DragMoveEvent, "operation">) {
+    setGroupDropError("");
     closeTaskActions();
     clearStatusHover();
     dragGeneration.current++;
@@ -161,6 +182,65 @@ export function useWorkspaceDrag({
           ? coordinates.x >= rect.left + rect.width / 2
           : coordinates.y >= rect.top + rect.height / 2
       : false;
+    if (isAggregateView(view) && typeof data.aggregateGroupId === "string") {
+      const kind = resolveGrouping(view, params);
+      const group =
+        data.chooseDate && (kind === "schedule" || kind === "deadline")
+          ? makeGroup(kind, null, state, today)
+          : [...groups, ...emptyGroupTargets(kind, state, params, today)].find(
+              (g) => g.id === data.aggregateGroupId,
+            );
+      const task = allTasks.find((t) => t.id === sourceData.taskId);
+      if (!group || !task) return null;
+      if (data.chooseDate) group.id = String(data.aggregateGroupId);
+      const sameGroup = sourceData.aggregateGroupId === group.id;
+      const blockedReason =
+        !sameGroup && !group.canDrop
+          ? group.kind === "today"
+            ? "Tasks cannot move between Today and Overdue by dragging. Edit the task’s due date instead."
+            : group.kind === "upcoming"
+              ? "Tasks cannot move between Upcoming date groups by dragging. Edit the task’s scheduled or due date, or group by Scheduled date or Due date."
+              : "This grouping does not support moving tasks between groups."
+          : sameGroup &&
+              !manual &&
+              typeof data.taskId === "string" &&
+              data.taskId !== task.id
+            ? "Switch to Manual order to reorder tasks within this group."
+            : null;
+      if (blockedReason)
+        return {
+          kind: "aggregate-group",
+          group,
+          intent: "location",
+          ids: [],
+          blockedReason,
+        };
+      const destination = groupDestination(
+        task,
+        sourceData.aggregateGroupId,
+        group,
+        manual,
+        typeof data.taskId === "string" ? data.taskId : undefined,
+        after,
+        !!data.chooseDate,
+        dragDraft.current.destination?.kind === "aggregate-group"
+          ? dragDraft.current.destination
+          : null,
+      );
+      if (!destination || destination.chooseDate) return destination;
+      try {
+        groupDropAction(state, task, destination, allTasks, today);
+        return destination;
+      } catch (cause) {
+        return {
+          ...destination,
+          blockedReason:
+            cause instanceof Error
+              ? cause.message
+              : "This task cannot move here.",
+        };
+      }
+    }
     const header = target?.element
       ?.querySelector<HTMLElement>(".task-title")
       ?.getBoundingClientRect();
@@ -263,12 +343,16 @@ export function useWorkspaceDrag({
   }
   function dragEnd(event: DragEndEvent) {
     const { source, target } = event.operation;
+    dateDropReturnFocus.current =
+      source?.element instanceof HTMLElement ? source.element : null;
     const destination = event.canceled
       ? null
       : (destinationFor(event) ??
         // Only a missing collision target can use the last preview. A present
         // target resolving to null explicitly rejects or cancels that move.
-        (target ? null : dragDraft.current.destination));
+        (target || dragDraft.current.destination?.kind === "aggregate-group"
+          ? null
+          : dragDraft.current.destination));
     clearDrag();
     if (event.canceled) return;
     if (!source || (!target && !destination)) return;
@@ -292,6 +376,18 @@ export function useWorkspaceDrag({
     }
     const task = allTasks.find((t) => t.id === sourceData.taskId);
     if (!task) return;
+    if (destination?.kind === "aggregate-group") {
+      if (destination.blockedReason) {
+        toast.add({
+          title: "Task wasn’t moved",
+          description: destination.blockedReason,
+          type: "info",
+        });
+      } else if (destination.chooseDate) {
+        setPendingDateDrop({ taskId: task.id, destination });
+      } else commitGroupDrop(task, destination);
+      return;
+    }
     if (destination?.kind === "task") {
       act(
         taskDropAction(state, task, destination, allTasks, today),
@@ -328,7 +424,40 @@ export function useWorkspaceDrag({
     }
   }
 
+  function commitGroupDrop(task: Occurrence, destination: GroupDestination) {
+    try {
+      act(
+        groupDropAction(state, task, destination, allTasks, today),
+        destination.intent === "location"
+          ? "Task updated"
+          : "Task order updated",
+      );
+      setGroupDropError("");
+    } catch (cause) {
+      setGroupDropError(
+        cause instanceof Error ? cause.message : "Unable to move this task.",
+      );
+    }
+  }
+
+  function chooseDropDate(date: string) {
+    if (!pendingDateDrop) return;
+    const task = allTasks.find((t) => t.id === pendingDateDrop.taskId);
+    if (task)
+      commitGroupDrop(task, {
+        ...pendingDateDrop.destination,
+        chooseDate: false,
+        group: { ...pendingDateDrop.destination.group, value: date },
+      });
+    setPendingDateDrop(null);
+  }
+
   return {
+    dateDropReturnFocus,
+    pendingDateDrop,
+    cancelDateDrop: () => setPendingDateDrop(null),
+    chooseDropDate,
+    groupDropError,
     dragDestination,
     dragSnapshot,
     dragSource,

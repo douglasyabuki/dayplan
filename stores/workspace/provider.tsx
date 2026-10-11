@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 
+import { toast } from "@/components/ui/toast";
 import { dateKey } from "@/lib/dates";
 import { type TaskOperation } from "@/lib/tasks/operations";
 import { seedWorkspace } from "@/lib/workspace/seed";
@@ -123,10 +124,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => media.removeEventListener("change", apply);
   }, [state.theme]);
   useEffect(() => {
-    if (notice) {
-      const timer = setTimeout(() => setNotice(null), 7000);
-      return () => clearTimeout(timer);
-    }
+    if (!notice) return;
+    const id = toast.add({
+      title: notice.message,
+      type: "success",
+      timeout: 4000,
+      actionProps: {
+        children: "Undo",
+        onClick: () => {
+          commit(notice.before);
+          setOperationError("");
+          setNotice(null);
+          toast.close(id);
+        },
+      },
+      onClose: () => {
+        setNotice((currentNotice) =>
+          currentNotice === notice ? null : currentNotice,
+        );
+      },
+    });
+    return () => toast.close(id);
   }, [notice]);
   function act(action: Action, message?: string) {
     try {

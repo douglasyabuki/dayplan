@@ -1,6 +1,6 @@
-import { addDays } from "@/lib/dates";
 import { tagIndex } from "@/lib/tags/hierarchy";
 import { matchesTag } from "@/lib/tags/selectors";
+import { upcomingRange } from "@/lib/workspace/grouping";
 import { priorities } from "@/types-and-constants/tasks";
 import { type Occurrence } from "@/types-and-constants/tasks";
 import { type Workspace } from "@/types-and-constants/workspace";
@@ -94,10 +94,7 @@ export function selectTasks(
     )
       return false;
     if (view === "upcoming") {
-      const end = addDays(
-        today,
-        Math.max(30, Math.min(365, Number(params.get("range")) || 30)),
-      );
+      const { end } = upcomingRange(today, params.get("range"));
       if (
         ![task.schedule?.date, task.deadline?.date].some(
           (date) => date && date >= today && date <= end,

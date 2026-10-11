@@ -38,7 +38,7 @@ export function useEditorSession(
   const [pendingTitles, setPendingTitles] = useState<Record<string, string>>(
     {},
   );
-  const { editorGuardRef } = useWorkspaceController();
+  const { editorGuardRef, onTaskCreated } = useWorkspaceController();
   const dirty =
     Object.values(pendingTitles).some((title) => !!title.trim()) ||
     Object.values(entries).some(
@@ -145,6 +145,7 @@ export function useEditorSession(
   }
   return {
     ...workspace,
+    onTaskCreated,
     entries,
     setEntries,
     pendingTitles,
@@ -241,11 +242,15 @@ export function useTaskEditor(
       return;
     }
     try {
-      session.act(
-        { type: "replace", state: commitDrafts(session.state, entries) },
+      const nextState = commitDrafts(session.state, entries);
+      const saved = session.act(
+        { type: "replace", state: nextState },
         isNew ? "Task added" : "Tasks updated",
       );
-      close();
+      if (saved) {
+        if (isNew) session.onTaskCreated(draft, nextState);
+        close();
+      }
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Unable to save changes.",

@@ -218,7 +218,10 @@ test("context menu supports keyboard navigation, picker handoff, tags, duplicate
   await expect(
     page.getByRole("button", { name: "Edit Alpha task", exact: true }),
   ).toHaveCount(2);
-  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Task duplicated", exact: true })
+    .getByRole("button", { name: "Undo", exact: true })
+    .click();
   await expect(
     page.getByRole("button", { name: "Edit Alpha task", exact: true }),
   ).toHaveCount(1);
@@ -344,7 +347,10 @@ test("archive preserves independently archived children and scoped delete suppor
   await expect(
     page.getByRole("button", { name: "Edit Alpha task", exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Task deleted", exact: true })
+    .getByRole("button", { name: "Undo", exact: true })
+    .click();
   await expect(
     page.getByRole("button", { name: "Edit Alpha task", exact: true }),
   ).toBeVisible();

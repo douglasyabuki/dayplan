@@ -35,6 +35,7 @@ import {
 } from "@/components/sections/task-sections";
 import { SectionRemovalDropZone } from "@/components/tasks/task-drag-feedback";
 import { KanbanTaskBoard, TaskList } from "@/components/tasks/task-groups";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Calendar as DatePicker } from "@/components/ui/calendar";
 import {
@@ -67,8 +68,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
-import { dateKey, parseDay } from "@/lib/dates";
+import { dateKey, formatDate, parseDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { aggregateGroupings, isAggregateView } from "@/lib/workspace/grouping";
 import type { WorkspaceRoute } from "@/lib/workspace/routes";
 import { priorities } from "@/types-and-constants/tasks";
 
@@ -114,6 +116,11 @@ export function WorkspaceView({
     date,
     mode,
     range,
+    interval,
+    grouping,
+    act,
+    creationFeedback,
+    dismissCreationFeedback,
     allTasks,
     displayedTasks,
     displayedGroups,
@@ -135,7 +142,7 @@ export function WorkspaceView({
   const selectedSort =
     sortOptions.find(({ value }) => value === params.get("sort")) ??
     sortOptions[0];
-  const groupOptions: {
+  const availableGroupOptions: {
     value: string;
     label: string;
     Icon: LucideIcon;
@@ -144,7 +151,7 @@ export function WorkspaceView({
       ? [{ value: "sections", label: "Sections", Icon: FolderTree }]
       : []),
     ...(view === "today"
-      ? [{ value: "today", label: "Today sections", Icon: Calendar }]
+      ? [{ value: "today", label: "Today and overdue", Icon: Calendar }]
       : []),
     ...(view === "upcoming"
       ? [{ value: "upcoming", label: "Upcoming dates", Icon: CalendarClock }]
@@ -156,6 +163,12 @@ export function WorkspaceView({
     { value: "priority", label: "Priority", Icon: Flag },
     { value: "status", label: "Status", Icon: ListChecks },
   ];
+  const aggregate = isAggregateView(view);
+  const groupOptions = aggregate
+    ? aggregateGroupings[view].map((kind) =>
+        availableGroupOptions.find((option) => option.value === kind)!,
+      )
+    : availableGroupOptions;
   const defaultGroup = sectioned
     ? "sections"
     : view === "today"
@@ -163,11 +176,14 @@ export function WorkspaceView({
       : view === "upcoming"
         ? "upcoming"
         : "none";
-  const selectedGroupValue = params.get("group") ?? defaultGroup;
+  const selectedGroupValue = aggregate
+    ? grouping
+    : (params.get("group") ?? defaultGroup);
   const selectedGroup =
     groupOptions.find(({ value }) => value === selectedGroupValue) ??
     groupOptions.find(({ value }) => value === "none")!;
-  const quickAddForm = !showSections &&
+  const quickAddForm = !aggregate &&
+    !showSections &&
     !["archive", "completed"].includes(view) && (
       <form
         className={cn(
@@ -263,18 +279,44 @@ export function WorkspaceView({
                     : `${visible.length} tasks`}
                 </span>
                 {view === "upcoming" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setParams({
-                        range: String(Math.min(range + 30, 365)),
-                      })
-                    }
-                    disabled={range >= 365}
-                  >
-                    Next {range} days <Plus data-icon="inline-end" />
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={String(range)}
+                      items={[7, 30, 365].map((days) => ({
+                        value: String(days),
+                        label: `Next ${days} days`,
+                      }))}
+                      onValueChange={(value) =>
+                        value && setParams({ range: value })
+                      }
+                    >
+                      <SelectTrigger aria-label="Upcoming range">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {[7, 30, 365].map((days) => (
+                            <SelectItem key={days} value={String(days)}>
+                              Next {days} days
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <span>
+                      {formatDate(interval.start, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}{" "}
+                      –{" "}
+                      {formatDate(interval.end, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
                 )}
               </div>
               {layout === "board" && quickAddForm}
@@ -348,7 +390,7 @@ export function WorkspaceView({
                           {selectedGroup.label}
                           <ChevronDown data-icon="inline-end" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="min-w-44">
+                        <DropdownMenuContent align="start" className="min-w-52">
                           <DropdownMenuGroup>
                             <DropdownMenuRadioGroup
                               value={selectedGroup.value}
@@ -494,6 +536,57 @@ export function WorkspaceView({
               </FieldGroup>
             </CollapsibleContent>
           </Collapsible>
+          {aggregate &&
+            grouping === "status" &&
+            (params.get("status") ?? "open") !== "all" && (
+              <Alert className="mb-3">
+                <AlertDescription>
+                  Status grouping currently shows only one status.{" "}
+                  <Button
+                    variant="link"
+                    onClick={() => setParams({ status: "all" })}
+                  >
+                    Show all statuses
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+          {view === "upcoming" && range === 365 && layout === "board" && (
+            <Alert className="mb-3">
+              <AlertDescription>
+                A year of date columns is easier to browse as a list.{" "}
+                <Button
+                  variant="link"
+                  onClick={() =>
+                    act({ type: "viewLayout", view, layout: "list" })
+                  }
+                >
+                  Switch to list
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          {aggregate && creationFeedback && (
+            <Alert className="mb-3">
+              <AlertDescription>
+                {creationFeedback.message}
+                <div className="flex gap-2">
+                  <Button
+                    variant="link"
+                    onClick={() => {
+                      open(creationFeedback.task);
+                      dismissCreationFeedback();
+                    }}
+                  >
+                    Open task
+                  </Button>
+                  <Button variant="ghost" onClick={dismissCreationFeedback}>
+                    Dismiss
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <div
               className={cn(
@@ -540,7 +633,7 @@ export function WorkspaceView({
                       manual={(params.get("sort") ?? "manual") === "manual"}
                       open={open}
                       reorder={reorder}
-                      add={() => create()}
+                      add={(group) => create(group ? { group } : undefined)}
                     />
                   ) : (
                     <TaskList
@@ -548,7 +641,7 @@ export function WorkspaceView({
                       manual={(params.get("sort") ?? "manual") === "manual"}
                       open={open}
                       reorder={reorder}
-                      add={() => create()}
+                      add={(group) => create(group ? { group } : undefined)}
                     />
                   )}
                   {layout !== "board" && quickAddForm}

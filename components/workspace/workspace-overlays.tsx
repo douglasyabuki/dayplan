@@ -11,6 +11,7 @@ import { TagDialog } from "@/components/tags/tag-dialog";
 import { TaskEditor } from "@/components/tasks/editor/task-editor";
 import { TaskDragSnapshot } from "@/components/tasks/task-drag-feedback";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
+import { dateKey, parseDay } from "@/lib/dates";
 
 export function WorkspaceOverlays() {
   const router = useRouter();
@@ -42,9 +44,54 @@ export function WorkspaceOverlays() {
     fallbackNewTask,
     selectedTask,
     closeEditor,
+    pendingDateDrop,
+    cancelDateDrop,
+    chooseDropDate,
+    today,
+    dateDropReturnFocus,
   } = useWorkspaceController();
   return (
     <>
+      {pendingDateDrop && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) cancelDateDrop();
+          }}
+        >
+          <DialogContent
+            className="w-auto"
+            finalFocus={() =>
+              dateDropReturnFocus.current?.isConnected
+                ? dateDropReturnFocus.current
+                : document.querySelector<HTMLElement>("header button")
+            }
+          >
+            <DialogHeader>
+              <DialogTitle>
+                Choose{" "}
+                {pendingDateDrop.destination.group.kind === "schedule"
+                  ? "scheduled"
+                  : "due"}{" "}
+                date
+              </DialogTitle>
+              <DialogDescription>
+                Select a date to move the task. Cancel leaves it unchanged.
+              </DialogDescription>
+            </DialogHeader>
+            <Calendar
+              mode="single"
+              defaultMonth={parseDay(today)}
+              onSelect={(date) => {
+                if (date) chooseDropDate(dateKey(date));
+              }}
+            />
+            <Button variant="outline" onClick={cancelDateDrop}>
+              Cancel
+            </Button>
+          </DialogContent>
+        </Dialog>
+      )}
       {selectedTaskId === "new" ? (
         <TaskEditor
           key={newDraft?.id ?? "new"}

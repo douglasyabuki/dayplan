@@ -66,6 +66,7 @@ function useControllerState() {
   >({});
   const [taskExpanded, setTaskExpanded] = useState<Record<string, boolean>>({});
   const drag = useWorkspaceDrag({
+    view,
     state,
     today,
     act,

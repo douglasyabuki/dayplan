@@ -18,6 +18,7 @@ import {
   Folder,
   IndentDecrease,
   IndentIncrease,
+  ListStart,
   Pencil,
   Plus,
   Repeat2,
@@ -148,6 +149,9 @@ export function TaskItem({
   itemRef,
   dragging,
   movable,
+  up,
+  down,
+  groupOrder = false,
   depth = 0,
 }: {
   task: Occurrence;
@@ -164,6 +168,7 @@ export function TaskItem({
   manual: boolean;
   up?: () => void;
   down?: () => void;
+  groupOrder?: boolean;
   /** Visual nesting: roots are 0; each rendered child increments by 1. */
   depth?: number;
 }) {
@@ -191,7 +196,7 @@ export function TaskItem({
         controller.hierarchyTasks.some((v) => v.id === t.id),
       )
     : allChildren;
-  const children = visibleChildren;
+  const children = controller.flatGroups ? [] : visibleChildren;
   const index = taskIndex(state.tasks);
   const template = index.byId.get(task.taskId)!;
   const parentRef = template.parentId ? { taskId: template.parentId } : null;
@@ -208,8 +213,12 @@ export function TaskItem({
     .map((t) => asOccurrence({ ...t, ...index.location(t.id) }));
   const siblingIndex = siblings.findIndex((t) => t.taskId === task.taskId);
   const canReorder =
+    !controller.flatGroups &&
     hierarchical &&
-    (!!parentRef || (controller.params.get("sort") ?? "manual") === "manual") &&
+    ((!controller.flatGroups &&
+      !["today", "upcoming", "tasks"].includes(controller.view) &&
+      !!parentRef) ||
+      (controller.params.get("sort") ?? "manual") === "manual") &&
     !task.archived &&
     siblings.every((t) =>
       controller.hierarchyTasks.some((v) => v.taskId === t.taskId),
@@ -274,10 +283,11 @@ export function TaskItem({
     !!controller.dragDestination.parentRef &&
     referenceKey(controller.dragDestination.parentRef) === task.id;
   const { ref: childrenDropRef } = useDroppable({
-    id: `task-children:${task.id}`,
+    id: `task-children:${triggerId}:${task.id}`,
     accept: ["section-task", "row"],
     collisionPriority: depth + 1.5,
-    disabled: task.archived || controller.statusGrouping,
+    disabled:
+      task.archived || controller.statusGrouping || controller.flatGroups,
     data: { kind: "task-children", taskId: task.id, sectionId: task.sectionId },
   });
   const ancestry = taskIndex(state.tasks).ancestors(task.taskId).reverse();
@@ -392,10 +402,17 @@ export function TaskItem({
                     depth >= 4 ||
                     !occurrenceParent(state, task)) && (
                     <p
-                      className="text-muted-foreground truncate text-xs"
-                      title={ancestry.map((t) => t.title).join(" / ")}
+                      className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs"
+                      title={`Subtask of ${ancestry.map((t) => t.title).join(" / ")}`}
                     >
-                      {ancestry.map((t) => t.title).join(" / ")}
+                      <ListStart
+                        className="size-3 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only">Subtask of </span>
+                      <span className="truncate">
+                        {ancestry.map((t) => t.title).join(" / ")}
+                      </span>
                     </p>
                   )}
                 <ItemTitle
@@ -718,15 +735,19 @@ export function TaskItem({
         </ContextMenuGroup>
         <ContextMenuGroup>
           <ContextMenuItem
-            disabled={!canReorder || siblingIndex <= 0}
-            onClick={() => moveSibling(-1)}
+            disabled={groupOrder ? !up : !canReorder || siblingIndex <= 0}
+            onClick={up ?? (() => moveSibling(-1))}
           >
             <ArrowUp />
             Move up
           </ContextMenuItem>
           <ContextMenuItem
-            disabled={!canReorder || siblingIndex >= siblings.length - 1}
-            onClick={() => moveSibling(1)}
+            disabled={
+              groupOrder
+                ? !down
+                : !canReorder || siblingIndex >= siblings.length - 1
+            }
+            onClick={down ?? (() => moveSibling(1))}
           >
             <ArrowDown />
             Move down

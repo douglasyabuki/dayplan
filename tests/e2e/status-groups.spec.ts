@@ -76,12 +76,12 @@ async function startDrag(page: Page, id: string) {
   const box = (await source.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(250);
   await page.mouse.move(
     box.x + box.width / 2 + 12,
     box.y + box.height / 2 + 12,
     { steps: 5 },
   );
+  await expect(card(page, id)).toHaveClass(/opacity-30/);
 }
 async function over(page: Page, target: Locator) {
   const box = (await target.boundingBox())!;
@@ -307,9 +307,14 @@ for (const board of [false, true]) {
       "data-task-drop-preview",
       /"completed":true/,
     );
+    const destination = await preview.getAttribute("data-task-drop-preview");
     // Release over the expanded group's preview, not the collapsed header's
     // old coordinates, which can now resolve to the source card on the board.
     await over(page, preview);
+    await expect(preview).toHaveAttribute(
+      "data-task-drop-preview",
+      destination!,
+    );
     await page.mouse.up();
     await expect
       .poll(async () =>
@@ -325,6 +330,12 @@ for (const board of [false, true]) {
           ).completed,
       )
       .toBe(false);
+    await expect(
+      group(page, "parent", false).getByRole("button", {
+        name: "Edit open",
+        exact: true,
+      }),
+    ).toBeVisible();
     await startDrag(page, "open");
     await over(page, trigger);
     await page.keyboard.press("Escape");

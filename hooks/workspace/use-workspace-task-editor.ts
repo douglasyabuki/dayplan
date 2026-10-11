@@ -11,9 +11,16 @@ import {
   parseReference,
   resolveOccurrence,
 } from "@/lib/tasks/recurrence";
+import {
+  creationDefaults,
+  isAggregateView,
+  type TaskCreationContext,
+} from "@/lib/workspace/grouping";
 import { workspaceHref } from "@/lib/workspace/routes";
+import { selectTasks } from "@/lib/workspace/selectors";
 import type { useWorkspace } from "@/stores/workspace/provider";
 import type { Occurrence } from "@/types-and-constants/tasks";
+import type { Workspace } from "@/types-and-constants/workspace";
 
 type TaskEditorOptions = Pick<
   ReturnType<typeof useWorkspace>,
@@ -47,6 +54,14 @@ export function useWorkspaceTaskEditor({
   allTasks,
   closeTaskActions,
 }: TaskEditorOptions) {
+  const [creationFeedback, setCreationFeedback] = useState<{
+    task: Occurrence;
+    message: string;
+  } | null>(null);
+  const creationOrigin = useRef<{
+    view: string;
+    params: URLSearchParams;
+  } | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
   const [editorHandle] = useState(() => PopoverPrimitive.createHandle());
   const [editorOrigin, setEditorOrigin] = useState<
@@ -75,7 +90,7 @@ export function useWorkspaceTaskEditor({
     else action();
   }
   function create(
-    day?: string,
+    day?: string | TaskCreationContext,
     time?: string,
     sectionId: string | null = null,
   ) {
@@ -88,15 +103,68 @@ export function useWorkspaceTaskEditor({
           view === "projects" ? (selectedId ?? null) : null,
         );
         task.sectionId = sectionId;
+        if (isAggregateView(view)) {
+          Object.assign(
+            task,
+            creationDefaults(
+              view,
+              params,
+              today,
+              typeof day === "object" ? day : {},
+            ),
+          );
+          creationOrigin.current = {
+            view,
+            params: new URLSearchParams(params),
+          };
+        } else creationOrigin.current = null;
         if (view === "tags" && selectedId) task.tagIds = [selectedId];
-        if (day) task.schedule = { date: day, time, duration: 30 };
-        else if (view === "today")
-          task.schedule = { date: today, duration: 30 };
+        if (typeof day === "string")
+          task.schedule = { date: day, time, duration: 30 };
         setNewDraft(asOccurrence(task));
         setParams({ task: "new" });
       });
     if (editorGuardRef.current) editorGuardRef.current(action);
     else action();
+  }
+  function onTaskCreated(task: Occurrence, nextState: Workspace) {
+    const origin = creationOrigin.current;
+    if (
+      !origin ||
+      selectTasks(
+        [task],
+        nextState,
+        origin.view,
+        undefined,
+        origin.params,
+        today,
+      ).length
+    ) {
+      setCreationFeedback(null);
+      return;
+    }
+    const location =
+      nextState.projects.find((p) => p.id === task.projectId)?.name ?? "Inbox";
+    const withoutFilters = selectTasks(
+      [task],
+      nextState,
+      origin.view,
+      undefined,
+      new URLSearchParams({
+        status: "all",
+        ...(origin.params.get("range")
+          ? { range: origin.params.get("range")! }
+          : {}),
+      }),
+      today,
+    );
+    const reason = withoutFilters.length
+      ? "it does not match the current filters"
+      : "its dates fall outside this view";
+    setCreationFeedback({
+      task,
+      message: `Task saved in ${location}; ${reason}.`,
+    });
   }
   function closeEditor() {
     startTransition(() => {
@@ -138,6 +206,9 @@ export function useWorkspaceTaskEditor({
     return () => window.removeEventListener("keydown", handler);
   });
   return {
+    creationFeedback,
+    dismissCreationFeedback: () => setCreationFeedback(null),
+    onTaskCreated,
     quickTitle,
     setQuickTitle,
     editorHandle,

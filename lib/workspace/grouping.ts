@@ -1,16 +1,149 @@
 import { addDays } from "@/lib/dates";
-import { type Occurrence } from "@/types-and-constants/tasks";
+import {
+  type Occurrence,
+  priorities,
+  type Priority,
+} from "@/types-and-constants/tasks";
 import { type Workspace } from "@/types-and-constants/workspace";
 
-/**
- * Groups selected tasks by the requested grouping, or by a view-specific default.
- * @param tasks Task occurrences to group.
- * @param state Workspace supplying project names.
- * @param view Current view key, used to choose the default grouping.
- * @param params URL parameters including `group` and upcoming range settings.
- * @param today Current date key for relative groups.
- * @returns {[string, Occurrence[]][]} `[label, occurrences]` tuples. Each label is a group name or date and its array contains the matching task occurrences. `upcoming`, `schedule`, and `deadline` groups sort by label; `today` puts `Overdue` first; other groupings preserve first-seen order.
- * @example `groupTasks(tasks, state, "today", new URLSearchParams(), "2026-10-01")` groups tasks into overdue and today's focus.
+export type GroupKind =
+  | "none"
+  | "today"
+  | "upcoming"
+  | "project"
+  | "priority"
+  | "schedule"
+  | "deadline"
+  | "status";
+export type GroupValue = string | null;
+export type TaskAppearance = {
+  id: string;
+  task: Occurrence;
+  roles: ("Scheduled" | "Due")[];
+};
+export type TaskGroup = {
+  id: string;
+  kind: GroupKind;
+  value: GroupValue;
+  label: string;
+  tasks: Occurrence[];
+  appearances: TaskAppearance[];
+  canCreate: boolean;
+  canDrop: boolean;
+};
+
+export const aggregateGroupings: Record<string, GroupKind[]> = {
+  today: ["today", "project", "priority", "none"],
+  upcoming: ["upcoming", "project", "priority", "schedule", "deadline", "none"],
+  tasks: ["none", "project", "priority", "schedule", "deadline", "status"],
+};
+
+/** Identifies aggregate views.
+ * @param view Current route view.
+ * @returns {boolean} Whether the view has aggregate group semantics.
+ * @example isAggregateView("today") // true
+ */
+export function isAggregateView(view: string): boolean {
+  return Object.hasOwn(aggregateGroupings, view);
+}
+
+/** Resolves a supported grouping, falling back to the view default.
+ * @param view Current route view.
+ * @param params Route query parameters.
+ * @returns {GroupKind} Effective grouping used by controls and rendering.
+ * @example resolveGrouping("today", new URLSearchParams("group=status")) // "today"
+ */
+export function resolveGrouping(
+  view: string,
+  params: URLSearchParams,
+): GroupKind {
+  const allowed = aggregateGroupings[view] ?? [
+    "none",
+    "project",
+    "priority",
+    "schedule",
+    "deadline",
+    "status",
+  ];
+  const requested = params.get("group") as GroupKind;
+  return allowed.includes(requested) ? requested : allowed[0];
+}
+
+/** Resolves fixed inclusive Upcoming intervals and legacy numeric ranges.
+ * @param today Workspace-local current date key.
+ * @param raw Requested day count.
+ * @returns {{ days: 7 | 30 | 365; start: string; end: string }} Inclusive interval, defaulting invalid input to 30 days.
+ * @example upcomingRange("2026-12-30", "7").end // "2027-01-05"
+ */
+export function upcomingRange(today: string, raw: string | null) {
+  const value = Number(raw);
+  const days: 7 | 30 | 365 =
+    !Number.isFinite(value) || value <= 0
+      ? 30
+      : value <= 7
+        ? 7
+        : value <= 30
+          ? 30
+          : 365;
+  return { days, start: today, end: addDays(today, days - 1) };
+}
+
+/** Builds a stable descriptor independently of its contents.
+ * @param kind Property or overview grouping.
+ * @param value Destination value; null means no date or Inbox.
+ * @param state Workspace project metadata.
+ * @param today Workspace-local current date.
+ * @returns {TaskGroup} Empty group with label and supported actions.
+ * @example makeGroup("priority", "high", state, today).canDrop // true
+ */
+export function makeGroup(
+  kind: GroupKind,
+  value: GroupValue,
+  state: Pick<Workspace, "projects">,
+  today: string,
+): TaskGroup {
+  let label = value ?? "No date";
+  if (kind === "none") label = "Tasks";
+  if (kind === "project")
+    label = state.projects.find((p) => p.id === value)?.name ?? "Inbox";
+  if (kind === "priority")
+    label =
+      value === "none"
+        ? "No priority"
+        : `${value![0].toUpperCase()}${value!.slice(1)} priority`;
+  if (kind === "status") label = value === "completed" ? "Completed" : "Open";
+  if (kind === "today") label = value === "overdue" ? "Overdue" : "Today";
+  if (kind === "schedule" && value === null) label = "No scheduled date";
+  if (kind === "deadline" && value === null) label = "No due date";
+  return {
+    id: JSON.stringify([kind, value]),
+    kind,
+    value,
+    label,
+    tasks: [],
+    appearances: [],
+    canCreate:
+      !(kind === "today" && value === "overdue") &&
+      !(kind === "status" && value === "completed") &&
+      !(
+        ["schedule", "deadline", "upcoming"].includes(kind) &&
+        value !== null &&
+        value < today
+      ),
+    canDrop: ["project", "priority", "schedule", "deadline", "status"].includes(
+      kind,
+    ),
+  };
+}
+
+/** Groups occurrences by stable properties, retaining Upcoming appearance roles.
+ * @param tasks Matching occurrences with inherited locations resolved.
+ * @param state Workspace project metadata.
+ * @param view Current view.
+ * @param params Group and range parameters.
+ * @param today Workspace-local date.
+ * @returns {TaskGroup[]} Populated groups; date groups are chronological with no-date last.
+ * @example groupTasks(tasks, state, "upcoming", params, today)
  */
 export function groupTasks(
   tasks: Occurrence[],
@@ -18,55 +151,134 @@ export function groupTasks(
   view: string,
   params: URLSearchParams,
   today: string,
-): [string, Occurrence[]][] {
-  const groups = new Map<string, Occurrence[]>();
-  const grouping =
-    params.get("group") ??
-    (view === "today" ? "today" : view === "upcoming" ? "upcoming" : "none");
+): TaskGroup[] {
+  const groups = new Map<string, TaskGroup>();
+  const kind = resolveGrouping(view, params);
+  const range = upcomingRange(today, params.get("range"));
   for (const task of tasks) {
-    let keys = ["Tasks"];
-    if (grouping === "today")
-      keys = [
+    let values: GroupValue[] = [null];
+    if (kind === "today")
+      values = [
         task.deadline && task.deadline.date < today && !task.completed
-          ? "Overdue"
-          : "Your focus today",
+          ? "overdue"
+          : "today",
       ];
-    if (grouping === "upcoming")
-      keys = [
+    if (kind === "upcoming")
+      values = [
         ...new Set(
           [task.schedule?.date, task.deadline?.date].filter(
-            (d): d is string =>
-              !!d &&
-              d >= today &&
-              d <=
-                addDays(
-                  today,
-                  Math.max(
-                    30,
-                    Math.min(365, Number(params.get("range")) || 30),
-                  ),
-                ),
+            (d): d is string => !!d && d >= range.start && d <= range.end,
           ),
         ),
       ];
-    if (grouping === "project")
-      keys = [
-        state.projects.find((p) => p.id === task.projectId)?.name ?? "Inbox",
-      ];
-    if (grouping === "priority")
-      keys = [
-        task.priority === "none"
-          ? "No priority"
-          : `${task.priority[0].toUpperCase()}${task.priority.slice(1)} priority`,
-      ];
-    if (grouping === "status") keys = [task.completed ? "Completed" : "Open"];
-    if (grouping === "schedule" || grouping === "deadline")
-      keys = [task[grouping]?.date ?? "No date"];
-    for (const key of keys) groups.set(key, [...(groups.get(key) ?? []), task]);
+    if (kind === "project") values = [task.projectId];
+    if (kind === "priority") values = [task.priority];
+    if (kind === "status") values = [task.completed ? "completed" : "open"];
+    if (kind === "schedule" || kind === "deadline")
+      values = [task[kind]?.date ?? null];
+    for (const value of values) {
+      const descriptor = makeGroup(kind, value, state, today);
+      const group = groups.get(descriptor.id) ?? descriptor;
+      group.tasks.push(task);
+      const roles: TaskAppearance["roles"] = [];
+      if (kind === "upcoming") {
+        if (task.schedule?.date === value) roles.push("Scheduled");
+        if (task.deadline?.date === value) roles.push("Due");
+      }
+      group.appearances.push({ id: `${group.id}:${task.id}`, task, roles });
+      groups.set(group.id, group);
+    }
   }
-  const entries = [...groups.entries()];
-  if (["upcoming", "schedule", "deadline"].includes(grouping))
-    entries.sort(([a], [b]) => a.localeCompare(b));
-  if (grouping === "today") entries.sort(([a]) => (a === "Overdue" ? -1 : 1));
-  return entries;
+  const result = [...groups.values()];
+  if (["upcoming", "schedule", "deadline"].includes(kind))
+    result.sort((a, b) => (a.value ?? "9999").localeCompare(b.value ?? "9999"));
+  if (kind === "today")
+    result.sort(
+      (a, b) => Number(b.value === "overdue") - Number(a.value === "overdue"),
+    );
+  return result;
+}
+
+/** Supplies finite empty destinations compatible with explicit filters.
+ * @param kind Effective grouping.
+ * @param state Available projects.
+ * @param params Explicit filters.
+ * @param today Workspace date.
+ * @returns {TaskGroup[]} Empty descriptors to merge with populated groups during dragging.
+ * @example emptyGroupTargets("priority", state, params, today)
+ */
+export function emptyGroupTargets(
+  kind: GroupKind,
+  state: Pick<Workspace, "projects">,
+  params: URLSearchParams,
+  today: string,
+): TaskGroup[] {
+  let values: GroupValue[] = [];
+  if (kind === "project")
+    values = params.get("project")
+      ? [params.get("project")]
+      : [null, ...state.projects.map((p) => p.id)];
+  if (kind === "priority")
+    values = params.get("priority") ? [params.get("priority")] : priorities;
+  if (kind === "status")
+    values =
+      (params.get("status") ?? "open") === "all"
+        ? ["open", "completed"]
+        : [params.get("status") ?? "open"];
+  if (kind === "schedule" && params.get("scheduled") !== "yes") values = [null];
+  if (kind === "deadline" && !params.get("from") && !params.get("to"))
+    values = [null];
+  return values.map((value) => makeGroup(kind, value, state, today));
+}
+
+export type TaskCreationContext = { group?: Pick<TaskGroup, "kind" | "value"> };
+
+/** Combines view, filter, and clicked-group defaults without pre-completing tasks.
+ * @param view Aggregate view name.
+ * @param params Explicit filters.
+ * @param today Workspace-local date.
+ * @param context Optional clicked destination.
+ * @returns {Partial<Occurrence>} Editable defaults; undefined date fields explicitly clear dates.
+ * @example creationDefaults("today", new URLSearchParams("scheduled=no"), today) // deadline today
+ */
+export function creationDefaults(
+  view: string,
+  params: URLSearchParams,
+  today: string,
+  context: TaskCreationContext = {},
+): Partial<Occurrence> {
+  const defaults: Partial<Occurrence> = {
+    projectId: params.get("project") || null,
+    sectionId: null,
+    completed: false,
+  };
+  if (priorities.includes(params.get("priority") as Priority))
+    defaults.priority = params.get("priority") as Priority;
+  if (params.get("tag")) defaults.tagIds = [params.get("tag")!];
+  if (
+    view === "today" ||
+    view === "upcoming" ||
+    params.get("scheduled") === "yes"
+  )
+    defaults.schedule = { date: today, duration: 30 };
+  if (params.get("from") && params.get("from") === params.get("to"))
+    defaults.deadline = { date: params.get("from")! };
+  if (params.get("scheduled") === "no") defaults.schedule = undefined;
+  const group = context.group;
+  if (group?.kind === "project") defaults.projectId = group.value;
+  if (group?.kind === "priority") defaults.priority = group.value as Priority;
+  if (group?.kind === "schedule" || group?.kind === "upcoming")
+    defaults.schedule = group.value
+      ? { date: group.value, duration: 30 }
+      : undefined;
+  if (group?.kind === "deadline")
+    defaults.deadline = group.value ? { date: group.value } : undefined;
+  if (
+    (view === "today" || view === "upcoming") &&
+    !defaults.schedule &&
+    !defaults.deadline &&
+    group?.kind !== "deadline"
+  )
+    defaults.deadline = { date: today };
+  return defaults;
 }

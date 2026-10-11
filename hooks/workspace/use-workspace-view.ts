@@ -13,7 +13,12 @@ import {
   referenceKey,
   resolveOccurrence,
 } from "@/lib/tasks/recurrence";
-import { groupTasks } from "@/lib/workspace/grouping";
+import {
+  groupTasks,
+  isAggregateView,
+  resolveGrouping,
+  upcomingRange,
+} from "@/lib/workspace/grouping";
 import { containerKey } from "@/lib/workspace/layout";
 import type { WorkspaceViewName } from "@/lib/workspace/routes";
 import { selectTasks } from "@/lib/workspace/selectors";
@@ -100,12 +105,16 @@ export function useWorkspaceView({
     : mobile
       ? "day"
       : "week";
-  const range = Math.max(30, Math.min(365, Number(params.get("range")) || 30));
+  const interval = upcomingRange(today, params.get("range"));
+  const range = interval.days;
+  const grouping = resolveGrouping(view, params);
+  const flatGroups =
+    isAggregateView(view) && !(view === "tasks" && grouping === "none");
   const anchors = state.tasks
     .filter((t) => t.recurrence)
     .map((t) => t.schedule?.date ?? t.deadline?.date ?? today);
   const from = [...anchors, addDays(date, -42), today].sort()[0];
-  const to = [addDays(date, 45), addDays(today, range)].sort().at(-1)!;
+  const to = [addDays(date, 45), interval.end].sort().at(-1)!;
   const allTasks = useMemo(
     () => expandTasks(state, from, to),
     [state, from, to],
@@ -123,7 +132,8 @@ export function useWorkspaceView({
       selectTasks(allTasks, searchMetadata, view, selectedId, params, today),
     [allTasks, searchMetadata, view, selectedId, params, today],
   );
-  const hierarchyView = ["inbox", "projects", "tasks"].includes(view);
+  const hierarchyView =
+    !flatGroups && ["inbox", "projects", "tasks"].includes(view);
   const included = new Map(matches.map((t) => [t.id, t]));
   if (hierarchyView)
     for (const match of matches) {
@@ -185,6 +195,9 @@ export function useWorkspaceView({
     date,
     mode,
     range,
+    interval,
+    grouping,
+    flatGroups,
     allTasks,
     visible,
     hierarchyTasks: [...included.values()],
