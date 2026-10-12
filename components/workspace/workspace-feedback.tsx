@@ -35,11 +35,29 @@ export function WorkspaceFeedback() {
     busy,
     hasPendingImport,
     retryImport,
+    guestCleanupError,
+    hasPendingGuestCleanup,
+    retryGuestCleanup,
   } = useWorkspace();
 
   return (
     <>
       <GuestImportPanel />
+      {guestCleanupError && (
+        <Alert variant="destructive">
+          <AlertTitle>Guest data cleanup needs attention</AlertTitle>
+          <AlertDescription>{guestCleanupError}</AlertDescription>
+          {hasPendingGuestCleanup && (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={retryGuestCleanup}
+            >
+              Retry cleanup
+            </Button>
+          )}
+        </Alert>
+      )}
       {operationError && (
         <Alert
           variant="destructive"
@@ -52,7 +70,7 @@ export function WorkspaceFeedback() {
           </Button>
         </Alert>
       )}
-      {error && (
+      {(error || hasPendingImport) && (
         <Alert
           variant="destructive"
           className="fixed right-4 bottom-20 z-60 max-w-md shadow-lg"
@@ -62,7 +80,10 @@ export function WorkspaceFeedback() {
               ? "Account storage needs attention"
               : "Local storage needs attention"}
           </AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>
+            {error ||
+              "Resolve the pending guest import before editing your account workspace."}
+          </AlertDescription>
           {persistenceKind === "database" ? (
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={downloadBackup}>

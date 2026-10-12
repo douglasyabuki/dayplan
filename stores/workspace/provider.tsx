@@ -16,6 +16,7 @@ import { dateKey } from "@/lib/dates";
 import { type TaskOperation } from "@/lib/tasks/operations";
 import { emptyWorkspace } from "@/lib/workspace/empty";
 import { seedWorkspace } from "@/lib/workspace/seed";
+import { GUEST_DATA_EVENT } from "@/stores/persistence/guest-events";
 import {
   AccountWorkspaceDataSource,
   type ImportPreview,
@@ -24,6 +25,7 @@ import {
 import { type Action } from "@/stores/workspace/actions";
 import { taskAction, taskOperationAction } from "@/stores/workspace/commands";
 import type { WorkspaceDataSource } from "@/stores/workspace/data-source";
+import { type GuestData, readGuestData } from "@/stores/workspace/guest-data";
 import { WorkspacePersistenceSession } from "@/stores/workspace/persistence-session";
 import { reducer } from "@/stores/workspace/reducer";
 import { validateWorkspace } from "@/stores/workspace/validation";
@@ -73,6 +75,12 @@ type Context = {
   importGuest: (snapshot: Workspace, token: string) => Promise<boolean>;
   retryImport: () => Promise<boolean>;
   hasPendingImport: boolean;
+  guestData: GuestData | null;
+  guestDataError: string;
+  guestCleanupError: string;
+  hasPendingGuestCleanup: boolean;
+  retryGuestCleanup: () => void;
+  discardGuest: (target: GuestData) => boolean;
 };
 const TaskContext = createContext<Context | null>(null);
 const initial: Workspace = {
@@ -124,6 +132,33 @@ export function WorkspaceProvider({
     return false;
   }, [dataSource]);
   const database = dataSource.owner.kind === "account";
+  const [guestAvailability, setGuestAvailability] = useState<{
+    data: GuestData | null;
+    error: string;
+  }>({ data: null, error: "" });
+  useEffect(() => {
+    if (!database) return;
+    const refresh = () => {
+      try {
+        setGuestAvailability({ data: readGuestData(), error: "" });
+      } catch {
+        setGuestAvailability({
+          data: null,
+          error:
+            "Guest data could not be read. It has not been changed; import is unavailable.",
+        });
+      }
+    };
+    refresh();
+    window.addEventListener(GUEST_DATA_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener(GUEST_DATA_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [database]);
   const freshWorkspace = () =>
     database
       ? emptyWorkspace(Intl.DateTimeFormat().resolvedOptions().timeZone)
@@ -258,22 +293,21 @@ export function WorkspaceProvider({
     )
       return;
     setConfirmation({
-      title: clear ? "Clear your workspace data?" : "Reset your workspace?",
-      confirmLabel: clear ? "Clear data" : undefined,
+      title: clear ? "Clear your workspace data?" : "Reset to sample data?",
+      confirmLabel: clear ? "Clear data" : "Reset to sample data",
       description: clear
         ? `This permanently removes all tasks, projects, tags, and related workspace data ${database ? "from your account" : "from this browser"}. Your profile, theme, and timezone are kept. This cannot be undone.`
-        : database
-          ? "This replaces the saved account workspace with an empty workspace."
-          : "This replaces your tasks, projects, and tags with fresh sample data in this browser.",
+        : `This replaces all tasks, projects, tags, and related workspace data ${database ? "in your account" : "in this browser"} with fresh sample data. Your profile, theme, and timezone are kept. This cannot be undone.`,
       action: () => {
         const scope = persistence.current;
         if (!scope?.active || editsBlocked() || (database && !!error)) return;
-        const fresh = clear
-          ? {
-              ...emptyWorkspace(current.current.timezone),
-              theme: current.current.theme,
-            }
-          : freshWorkspace();
+        const fresh = {
+          ...(clear
+            ? emptyWorkspace(current.current.timezone)
+            : seedWorkspace(current.current.timezone)),
+          theme: current.current.theme,
+          timezone: current.current.timezone,
+        };
         const before = revision.current;
         scope.reset(fresh, () => {
           setError("");
@@ -343,12 +377,21 @@ export function WorkspaceProvider({
     } catch (cause) {
       if (scope.active) {
         if (
-          cause instanceof PersistenceError &&
-          cause.code === "import_confirmation_required"
+          (cause instanceof PersistenceError &&
+            cause.code === "import_confirmation_required") ||
+          (cause instanceof PersistenceError &&
+            [
+              "guest_changed",
+              "guest_metadata_failed",
+              "guest_cleanup_pending",
+              "guest_recovery_pending",
+            ].includes(cause.code))
         ) {
           scope.resume();
           setOperationError(
-            "Import history changed. Open Account settings and choose Import guest data to review and confirm it again.",
+            cause.code === "import_confirmation_required"
+              ? "Import history changed. Open Settings and choose Data to review and confirm the guest import again."
+              : cause.message,
           );
         } else storageFailure("Account storage is unavailable.", cause);
       }
@@ -416,11 +459,57 @@ export function WorkspaceProvider({
         hasPendingImport:
           dataSource instanceof AccountWorkspaceDataSource &&
           dataSource.hasPendingImport,
-        importGuest: (snapshot, token) =>
-          exclusive(async (source, signal) => {
+        guestData: guestAvailability.data,
+        guestDataError: guestAvailability.error,
+        guestCleanupError:
+          dataSource instanceof AccountWorkspaceDataSource
+            ? dataSource.guestCleanupError
+            : "",
+        hasPendingGuestCleanup:
+          dataSource instanceof AccountWorkspaceDataSource &&
+          dataSource.hasPendingGuestCleanup,
+        retryGuestCleanup: () => {
+          if (
+            persistence.current?.active &&
+            dataSource instanceof AccountWorkspaceDataSource
+          )
+            dataSource.retryGuestCleanup();
+        },
+        discardGuest: (target) => {
+          if (
+            !persistence.current?.active ||
+            busyRef.current ||
+            !(dataSource instanceof AccountWorkspaceDataSource) ||
+            dataSource.hasPendingImport
+          )
+            return false;
+          try {
+            return dataSource.discardGuest(target);
+          } catch (cause) {
+            setOperationError(
+              cause instanceof Error
+                ? cause.message
+                : "Guest data could not be deleted. Try discarding again.",
+            );
+            return false;
+          }
+        },
+        importGuest: (snapshot, token) => {
+          // Capture profile values at confirmation, before queued account saves.
+          let target: GuestData;
+          try {
+            target = readGuestData();
+          } catch {
+            setOperationError(
+              "Guest data could not be read. Import has not started.",
+            );
+            return Promise.resolve(false);
+          }
+          return exclusive(async (source, signal) => {
             await source.save(current.current, signal);
-            return source.importGuest(snapshot, token, signal);
-          }),
+            return source.importGuest(snapshot, token, signal, target);
+          });
+        },
         retryImport: () =>
           exclusive((source, signal) => source.retryImport(signal), true),
         notice,

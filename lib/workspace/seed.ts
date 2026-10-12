@@ -5,11 +5,14 @@ import type { Workspace } from "@/types-and-constants/workspace";
 
 /**
  * Creates a sample workspace with sections, subtasks, priorities, tags, and dates.
- * @returns {Workspace} A new object with `version: 2`, seeded `sections`, `projects`, `tags`, and `tasks`, empty `layouts` and `exceptions`, the resolved local `timezone`, and `theme: "system"`; sample date fields are based on the current date.
+ * @param timezone Timezone for sample dates and workspace preferences; defaults to the device timezone.
+ * @returns {Workspace} A new object with `version: 2`, seeded `sections`, `projects`, `tags`, and `tasks`, empty `layouts` and `exceptions`, the selected `timezone`, and `theme: "system"`; sample date fields are based on today's date in that timezone.
  * @example `seedWorkspace()` returns a workspace with Studio, Website refresh, and Personal projects.
  */
-export function seedWorkspace(): Workspace {
-  const today = dateKey();
+export function seedWorkspace(
+  timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): Workspace {
+  const today = dateKey(new Date(), timezone);
   const entries: (Partial<Task> & { children?: Partial<Task>[] })[] = [
     {
       title: "Shape the new onboarding experience",
@@ -304,7 +307,7 @@ export function seedWorkspace(): Workspace {
       { id: "personal-plans", name: "Plans", projectId: "personal", order: 1 },
     ],
     layouts: {},
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timezone,
     theme: "system",
     projects: [
       { id: "studio", name: "Studio", color: "indigo" },

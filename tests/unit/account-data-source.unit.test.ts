@@ -1,8 +1,13 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { emptyWorkspace } from "@/lib/workspace/empty";
 import { seedWorkspace } from "@/lib/workspace/seed";
 import { accountDataSources } from "@/stores/workspace/account-data-source";
+import { STORAGE_KEY } from "@/stores/workspace/persistence";
+
+import { mockGuestStorage } from "../guest-storage";
+
+beforeEach(() => mockGuestStorage());
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -87,6 +92,7 @@ test("returning owner reconciles an aborted ambiguous save with a new verified s
 
 test("a lost import response retries unchanged and adopts the latest returned snapshot", async () => {
   const guest = seedWorkspace();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(guest));
   const latest = { ...emptyWorkspace(), theme: "dark" as const };
   const imports: unknown[] = [];
   vi.stubGlobal(

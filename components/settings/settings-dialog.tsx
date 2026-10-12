@@ -52,9 +52,11 @@ export function SettingsDialog({
   const edit = useRef<AccountEditHandle>(null);
   const selectedButton = useRef<HTMLButtonElement>(null);
   const composing = useRef(false);
-  const dataActionAfterClose = useRef<"reset" | "clear" | null>(null);
+  const dataActionAfterClose = useRef<"reset" | "clear" | "reload" | null>(
+    null,
+  );
   const { ready } = useAccount();
-  const { reset, clearData } = useWorkspace();
+  const { reset, clearData, reloadSaved } = useWorkspace();
 
   function close(cancel = false) {
     if (cancel) edit.current?.cancel();
@@ -83,11 +85,12 @@ export function SettingsDialog({
           onClose();
           if (dataActionAfterClose.current === "reset") reset();
           if (dataActionAfterClose.current === "clear") clearData();
+          if (dataActionAfterClose.current === "reload") reloadSaved();
         }
       }}
     >
       <DialogContent
-        className="flex h-[min(600px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-190"
+        className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-190 md:h-[min(600px,calc(100dvh-2rem))]"
         initialFocus={selectedButton}
         finalFocus={() =>
           returnFocus.current?.isConnected &&
@@ -186,6 +189,10 @@ export function SettingsDialog({
               {panel === "about" && <AboutPanel />}
               {panel === "data" && (
                 <DataPanel
+                  onReload={() => {
+                    dataActionAfterClose.current = "reload";
+                    close();
+                  }}
                   onReset={() => {
                     dataActionAfterClose.current = "reset";
                     close();

@@ -24,7 +24,6 @@ import { useAccount } from "@/stores/account/provider";
 
 import { AccountAvatar } from "./account-avatar";
 import { AuthControls } from "./auth-controls";
-import { GuestImportPanel } from "./guest-import-panel";
 
 export type AccountEditHandle = { commit: () => void; cancel: () => void };
 
@@ -99,7 +98,6 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
   return (
     <div className="flex flex-col gap-6">
       <AuthControls authenticated={capabilities.hasAccount} />
-      {capabilities.hasAccount && <GuestImportPanel always />}
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
