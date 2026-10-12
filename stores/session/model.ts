@@ -1,7 +1,8 @@
 export type Session =
   | { status: "loading" }
   | { status: "guest" }
-  | { status: "authenticated"; userId: string };
+  | { status: "error"; message: string }
+  | { status: "authenticated"; userId: string; sessionId?: string };
 
 export type WorkspaceOwner =
   { kind: "guest" } | { kind: "account"; userId: string };

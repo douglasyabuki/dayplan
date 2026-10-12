@@ -63,7 +63,7 @@ function validTask(value: unknown): value is Task {
   );
 }
 export function validateWorkspace(value: unknown): Workspace {
-  const state = value as Workspace;
+  const state = structuredClone(value) as Workspace;
   const entity = (e: unknown) =>
     isRecord(e) &&
     typeof e.id === "string" &&
@@ -108,6 +108,7 @@ export function validateWorkspace(value: unknown): Workspace {
       throw new Error("Invalid section.");
   for (const task of state.tasks)
     if (
+      task.tagIds.some((id) => !state.tags.some((t) => t.id === id)) ||
       (task.projectId !== null &&
         !state.projects.some((p) => p.id === task.projectId)) ||
       (task.sectionId !== null &&
@@ -116,6 +117,19 @@ export function validateWorkspace(value: unknown): Workspace {
         ))
     )
       throw new Error("Invalid task location.");
+  for (const entries of [
+    state.tasks,
+    state.projects,
+    state.tags,
+    state.sections,
+  ]) {
+    const ids = entries.map((e) => e.id);
+    if (
+      ids.some((id) => typeof id !== "string" || !id) ||
+      new Set(ids).size !== ids.length
+    )
+      throw new Error("Entity IDs must be unique and nonempty.");
+  }
   for (const [key, e] of Object.entries(state.exceptions)) {
     if (
       !isRecord(e) ||
@@ -145,7 +159,21 @@ export function validateWorkspace(value: unknown): Workspace {
     };
     for (const key of e.cleared ?? [])
       delete (combined as unknown as Record<string, unknown>)[key];
-    if (!validTask(combined)) throw new Error("Invalid occurrence fields.");
+    if (
+      !validTask(combined) ||
+      combined.id !== e.taskId ||
+      (combined.parentId !== null &&
+        !state.tasks.some((t) => t.id === combined.parentId)) ||
+      (combined.projectId !== null &&
+        !state.projects.some((p) => p.id === combined.projectId)) ||
+      (combined.sectionId !== null &&
+        !state.sections.some(
+          (s) =>
+            s.id === combined.sectionId && s.projectId === combined.projectId,
+        )) ||
+      combined.tagIds.some((id) => !state.tags.some((t) => t.id === id))
+    )
+      throw new Error("Invalid occurrence fields.");
     if (
       !e.deleted &&
       e.parentRef &&

@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
+    "db:check": "node --conditions=react-server --import tsx scripts/verify-db.ts",
+    "test:account": "vitest run --project unit tests/unit/account-persistence.unit.test.ts tests/unit/account-data-source.unit.test.ts tests/unit/guest-import.unit.test.ts",
     "start": "next start",
     "test": "npm run test:unit && npm run test:browser && npm run test:e2e",
     "test:watch": "vitest",

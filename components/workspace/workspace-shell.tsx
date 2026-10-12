@@ -61,6 +61,7 @@ function WorkspaceLayout({ children }: { children: ReactNode }) {
 }
 
 function WorkspaceFrame({ children }: { children: ReactNode }) {
+  const { persistenceKind, busy } = useWorkspace();
   const { open, openMobile, isMobile, setOpenMobile } = useSidebar();
   const sidebarOpen = isMobile ? openMobile : open;
   const sidebarLabel = sidebarOpen ? "Collapse sidebar" : "Expand sidebar";
@@ -104,7 +105,11 @@ function WorkspaceFrame({ children }: { children: ReactNode }) {
             <span className="size-1.5 rounded-full bg-(--emerald)" />
             {storageError
               ? "Session only · storage unavailable"
-              : "Saved locally"}
+              : busy
+                ? "Updating account workspace…"
+                : persistenceKind === "database"
+                  ? "Account storage"
+                  : "Saved locally"}
           </Badge>
         </header>
         {children}

@@ -1,5 +1,8 @@
 "use client";
 
+import { useRef } from "react";
+
+import { GuestImportPanel } from "@/components/account/guest-import-panel";
 import { EditorSelect } from "@/components/tasks/controls/task-property-controls";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,6 +17,7 @@ import {
 import { useWorkspace } from "@/stores/workspace/provider";
 
 export function WorkspaceFeedback() {
+  const cancelButton = useRef<HTMLButtonElement>(null);
   const {
     error,
     operationError,
@@ -23,10 +27,19 @@ export function WorkspaceFeedback() {
     cancelConfirmation,
     setConfirmationChoice,
     acceptConfirmation,
+    persistenceKind,
+    recoveryCode,
+    downloadBackup,
+    reloadSaved,
+    retrySave,
+    busy,
+    hasPendingImport,
+    retryImport,
   } = useWorkspace();
 
   return (
     <>
+      <GuestImportPanel />
       {operationError && (
         <Alert
           variant="destructive"
@@ -44,16 +57,47 @@ export function WorkspaceFeedback() {
           variant="destructive"
           className="fixed right-4 bottom-20 z-60 max-w-md shadow-lg"
         >
-          <AlertTitle>Local storage needs attention</AlertTitle>
+          <AlertTitle>
+            {persistenceKind === "database"
+              ? "Account storage needs attention"
+              : "Local storage needs attention"}
+          </AlertTitle>
           <AlertDescription>{error}</AlertDescription>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => location.reload()}>
-              Retry loading
-            </Button>
-            <Button variant="outline" onClick={reset}>
-              Reset saved data
-            </Button>
-          </div>
+          {persistenceKind === "database" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={downloadBackup}>
+                Download local backup
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={reloadSaved}>
+                Load server version
+              </Button>
+              {hasPendingImport ? (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void retryImport()}
+                >
+                  Retry import
+                </Button>
+              ) : (
+                recoveryCode !== "revision_conflict" &&
+                recoveryCode !== "load_failed" && (
+                  <Button variant="outline" disabled={busy} onClick={retrySave}>
+                    Retry save
+                  </Button>
+                )
+              )}
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => location.reload()}>
+                Retry loading
+              </Button>
+              <Button variant="outline" onClick={reset}>
+                Reset saved data
+              </Button>
+            </div>
+          )}
         </Alert>
       )}
       <Dialog
@@ -62,7 +106,7 @@ export function WorkspaceFeedback() {
           if (!open) cancelConfirmation();
         }}
       >
-        <DialogContent>
+        <DialogContent initialFocus={cancelButton}>
           <DialogHeader>
             <DialogTitle>{confirmation?.title}</DialogTitle>
             <DialogDescription>{confirmation?.description}</DialogDescription>
@@ -76,11 +120,20 @@ export function WorkspaceFeedback() {
             />
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={cancelConfirmation}>
+            {confirmation?.title === "Load the saved workspace?" && (
+              <Button variant="outline" onClick={downloadBackup}>
+                Download local backup
+              </Button>
+            )}
+            <Button
+              ref={cancelButton}
+              variant="outline"
+              onClick={cancelConfirmation}
+            >
               Cancel
             </Button>
             <Button variant="destructive" onClick={acceptConfirmation}>
-              Confirm
+              {confirmation?.confirmLabel ?? "Confirm"}
             </Button>
           </DialogFooter>
         </DialogContent>

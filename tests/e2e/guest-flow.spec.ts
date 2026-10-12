@@ -32,12 +32,44 @@ async function openAccount(page: Page) {
     .getByRole("button", { name: /^Account and workspace settings for/ })
     .first()
     .click();
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(
     dialog.getByRole("textbox", { name: "Name", exact: true }),
   ).toBeVisible();
   return dialog;
 }
+
+test("account menu opens to the right, supports keyboard dismissal, and signs guests out to welcome", async ({
+  page,
+}) => {
+  await returningGuest(page);
+  const trigger = page
+    .getByRole("button", { name: /^Account and workspace settings for/ })
+    .first();
+  await trigger.click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem")).toHaveText(["Settings", "Sign out"]);
+  const triggerBounds = await trigger.boundingBox();
+  const menuBounds = await menu.boundingBox();
+  expect(menuBounds!.x).toBeGreaterThan(
+    triggerBounds!.x + triggerBounds!.width,
+  );
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  await trigger.press("ArrowDown");
+  await expect(
+    menu.getByRole("menuitem", { name: "Settings", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/welcome$/);
+  await expect(
+    page.getByRole("heading", { name: "Welcome to Dayplan" }),
+  ).toBeVisible();
+});
 
 test("first root visit offers guest entry with keyboard focus and leaves storage untouched before Continue", async ({
   page,
@@ -47,9 +79,11 @@ test("first root visit offers guest entry with keyboard focus and leaves storage
     page.getByRole("heading", { name: "Welcome to Dayplan" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Create an account/ }),
-  ).toBeDisabled();
-  await expect(page.getByRole("button", { name: /Sign in/ })).toBeDisabled();
+    page.getByRole("link", { name: "Sign in", exact: true }).first(),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("link", { name: "Sign up", exact: true }).first(),
+  ).toBeVisible();
   expect(
     await page.evaluate((key) => localStorage.getItem(key), workspaceKey),
   ).toBeNull();

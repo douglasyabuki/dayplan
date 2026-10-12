@@ -52,9 +52,9 @@ export function SettingsDialog({
   const edit = useRef<AccountEditHandle>(null);
   const selectedButton = useRef<HTMLButtonElement>(null);
   const composing = useRef(false);
-  const resetAfterClose = useRef(false);
+  const dataActionAfterClose = useRef<"reset" | "clear" | null>(null);
   const { ready } = useAccount();
-  const { reset } = useWorkspace();
+  const { reset, clearData } = useWorkspace();
 
   function close(cancel = false) {
     if (cancel) edit.current?.cancel();
@@ -81,7 +81,8 @@ export function SettingsDialog({
       onOpenChangeComplete={(next) => {
         if (!next) {
           onClose();
-          if (resetAfterClose.current) reset();
+          if (dataActionAfterClose.current === "reset") reset();
+          if (dataActionAfterClose.current === "clear") clearData();
         }
       }}
     >
@@ -186,7 +187,11 @@ export function SettingsDialog({
               {panel === "data" && (
                 <DataPanel
                   onReset={() => {
-                    resetAfterClose.current = true;
+                    dataActionAfterClose.current = "reset";
+                    close();
+                  }}
+                  onClear={() => {
+                    dataActionAfterClose.current = "clear";
                     close();
                   }}
                 />
