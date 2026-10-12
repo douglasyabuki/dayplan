@@ -27,6 +27,7 @@ import { useAccount } from "@/stores/account/provider";
 import { useWorkspace } from "@/stores/workspace/provider";
 
 import type { SettingsPanel } from "../../types-and-constants/settings";
+import type { Workspace } from "../../types-and-constants/workspace";
 import { AboutPanel } from "./about-panel";
 import { AppearancePanel } from "./appearance-panel";
 import { DataPanel } from "./data-panel";
@@ -52,9 +53,12 @@ export function SettingsDialog({
   const edit = useRef<AccountEditHandle>(null);
   const selectedButton = useRef<HTMLButtonElement>(null);
   const composing = useRef(false);
-  const resetAfterClose = useRef(false);
+  const dataActionAfterClose = useRef<"reset" | "clear" | "reload" | null>(
+    null,
+  );
+  const backupAfterClose = useRef<Workspace | null>(null);
   const { ready } = useAccount();
-  const { reset } = useWorkspace();
+  const { reset, clearData, reloadSaved, restoreBackup } = useWorkspace();
 
   function close(cancel = false) {
     if (cancel) edit.current?.cancel();
@@ -81,12 +85,15 @@ export function SettingsDialog({
       onOpenChangeComplete={(next) => {
         if (!next) {
           onClose();
-          if (resetAfterClose.current) reset();
+          if (dataActionAfterClose.current === "reset") reset();
+          if (dataActionAfterClose.current === "clear") clearData();
+          if (dataActionAfterClose.current === "reload") reloadSaved();
+          if (backupAfterClose.current) restoreBackup(backupAfterClose.current);
         }
       }}
     >
       <DialogContent
-        className="flex h-[min(600px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-190"
+        className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-190 md:h-[min(600px,calc(100dvh-2rem))]"
         initialFocus={selectedButton}
         finalFocus={() =>
           returnFocus.current?.isConnected &&
@@ -185,8 +192,20 @@ export function SettingsDialog({
               {panel === "about" && <AboutPanel />}
               {panel === "data" && (
                 <DataPanel
+                  onRestore={(snapshot) => {
+                    backupAfterClose.current = snapshot;
+                    close();
+                  }}
+                  onReload={() => {
+                    dataActionAfterClose.current = "reload";
+                    close();
+                  }}
                   onReset={() => {
-                    resetAfterClose.current = true;
+                    dataActionAfterClose.current = "reset";
+                    close();
+                  }}
+                  onClear={() => {
+                    dataActionAfterClose.current = "clear";
                     close();
                   }}
                 />

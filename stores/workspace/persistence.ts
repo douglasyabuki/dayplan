@@ -1,3 +1,4 @@
+import { notifyGuestDataChanged } from "@/stores/persistence/guest-events";
 import { guestOwner } from "@/stores/session/model";
 import { validateWorkspace } from "@/stores/workspace/validation";
 import type { Workspace } from "@/types-and-constants/workspace";
@@ -12,6 +13,7 @@ export function readWorkspace(): Workspace | null {
 }
 export function writeWorkspace(state: Workspace) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  notifyGuestDataChanged();
 }
 
 export const guestWorkspaceDataSource: WorkspaceDataSource = {

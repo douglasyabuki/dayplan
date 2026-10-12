@@ -13,7 +13,10 @@
 # testing
 /coverage
 /test-results
+# Generated Vitest browser failure screenshots
+/tests/__screenshots__/
 .vitest/
+.vitest-attachments/
 
 # next.js
 /.next/
@@ -34,6 +37,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -45,3 +49,5 @@ next-env.d.ts
 /temp
 .vscode*
 docs/todo.md
+
+/lib/generated/prisma

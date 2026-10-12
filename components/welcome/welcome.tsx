@@ -3,20 +3,19 @@
 import {
   ArrowDown,
   ArrowRight,
-  CalendarDays,
   CheckCircle2,
   Circle,
-  FolderKanban,
-  Inbox,
   Laptop,
   Sun,
   Sunrise,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 
+import { AuthControls, SessionError } from "@/components/account/auth-controls";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -26,43 +25,34 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { features } from "@/components/welcome/features";
+import { WorkspaceLoading } from "@/components/workspace/workspace-loading";
 import { safeWorkspaceDestination } from "@/lib/workspace/entry";
 import { useOnboarding } from "@/stores/onboarding/provider";
 import { useSession } from "@/stores/session/provider";
-
-const features = [
-  {
-    icon: Inbox,
-    title: "A place for every idea",
-    description:
-      "Capture tasks in your Inbox as they come to mind. Give them a priority, add a deadline, and find your next step.",
-    detail: "Less to remember. More room to think.",
-  },
-  {
-    icon: FolderKanban,
-    title: "Bring your projects together",
-    description:
-      "Organize work and life with projects, sections, and tags. Switch between lists and boards to see things your way.",
-    detail: "From the big picture to the little details.",
-  },
-  {
-    icon: CalendarDays,
-    title: "Make a plan for your time",
-    description:
-      "Focus on what matters in Today, then give tasks a place in your calendar. Plan by day, week, or month.",
-    detail: "A little structure for the day ahead.",
-  },
-];
 
 export function Welcome() {
   const router = useRouter();
   const params = useSearchParams();
   const session = useSession();
   const { ready, continueAsGuest, storageError } = useOnboarding();
+  const authenticated = session.status === "authenticated";
+  const destination = params.get("next") ?? undefined;
+
+  useEffect(() => {
+    if (authenticated) {
+      router.replace(
+        safeWorkspaceDestination(destination ?? null, window.location.origin),
+      );
+    }
+  }, [authenticated, destination, router]);
+
+  if (session.status === "loading" || authenticated)
+    return <WorkspaceLoading />;
 
   return (
     <div className="min-h-dvh">
-      <header className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-6 sm:px-10">
+      <header className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-6 sm:gap-4 sm:px-10">
         <div className="flex items-center gap-2.5 text-xl font-semibold tracking-tight">
           <span className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-xl">
             <Sunrise className="size-5" aria-hidden="true" />
@@ -71,13 +61,9 @@ export function Welcome() {
             Dayplan<span className="text-primary">.</span>
           </span>
         </div>
-        <a
-          href="#features"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-2 rounded-md py-2 text-sm transition-colors"
-        >
-          See what you can do
-          <ArrowDown className="size-4" aria-hidden="true" />
-        </a>
+        <nav aria-label="Account">
+          <AuthControls authenticated={false} destination={destination} />
+        </nav>
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-20 px-6 pt-10 pb-16 sm:px-10 sm:pt-16 lg:gap-24">
@@ -102,28 +88,53 @@ export function Welcome() {
               thoughtful space. Clear your mind, find your focus, and shape the
               day ahead.
             </p>
-            <div className="flex w-full max-w-md flex-col items-start gap-4 pt-2">
-              <Button
-                size="lg"
-                className="w-full sm:w-auto"
-                disabled={!ready || session.status === "loading"}
-                onClick={() => {
-                  const next = safeWorkspaceDestination(
-                    params.get("next"),
-                    window.location.origin,
-                  );
-                  continueAsGuest();
-                  router.replace(next);
-                }}
-              >
-                Continue without an account
-                <ArrowRight data-icon="inline-end" aria-hidden="true" />
-              </Button>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                Start as a guest with the full workspace. Your data stays in
-                this browser; it is not saved to an account or synced across
-                devices.
+            <div className="flex w-full max-w-md flex-col gap-4 pt-2">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <a
+                  className={buttonVariants({
+                    size: "lg",
+                    className: "w-full sm:w-auto sm:min-w-32",
+                  })}
+                  href={
+                    destination
+                      ? `/sign-up?next=${encodeURIComponent(destination)}`
+                      : "/sign-up"
+                  }
+                >
+                  Sign up
+                  <ArrowRight data-icon="inline-end" aria-hidden="true" />
+                </a>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={!ready || session.status === "error"}
+                  onClick={() => {
+                    const next = safeWorkspaceDestination(
+                      params.get("next"),
+                      window.location.origin,
+                    );
+                    if (session.status === "guest") continueAsGuest();
+                    router.replace(next);
+                  }}
+                >
+                  Continue without an account
+                </Button>
+              </div>
+              <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
+                Just exploring? The full workspace is yours to try. Guest plans
+                stay in this browser and don’t sync across devices.
               </p>
+              {session.status === "error" && (
+                <SessionError message={session.message} />
+              )}
+              {params.get("authError") && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    Google sign-in was cancelled or failed. Please try again.
+                  </AlertDescription>
+                </Alert>
+              )}
               {storageError && (
                 <Alert>
                   <AlertDescription>
@@ -133,6 +144,13 @@ export function Welcome() {
                 </Alert>
               )}
             </div>
+            <a
+              href="#features"
+              className={buttonVariants({ variant: "link", className: "px-0" })}
+            >
+              See what you can do
+              <ArrowDown data-icon="inline-end" aria-hidden="true" />
+            </a>
           </div>
           <WorkspacePreview />
         </section>
@@ -186,20 +204,18 @@ export function Welcome() {
           <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
             <div className="flex max-w-md flex-col gap-2">
               <h2 id="account-heading" className="font-medium">
-                A simple start. More to come.
+                Your workspace, your choice.
               </h2>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Dayplan is ready to use as a guest. Account creation and sign-in
-                are coming later.
+                Start as a guest in this browser, sign in to your account, or
+                sign up for a fresh start.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Button variant="outline" disabled>
-                Create an account — Coming later
-              </Button>
-              <Button variant="outline" disabled>
-                Sign in — Coming later
-              </Button>
+              <AuthControls
+                authenticated={false}
+                destination={params.get("next") ?? undefined}
+              />
             </div>
           </div>
         </section>

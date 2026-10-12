@@ -3,6 +3,7 @@
 import { useDroppable } from "@dnd-kit/react";
 import {
   Archive,
+  CalendarChevronsRight,
   CalendarDays,
   CheckCheck,
   Folder,
@@ -70,7 +71,7 @@ export function WorkspaceSidebar({
   const nav = [
     { id: "inbox", label: "Inbox", icon: Inbox },
     { id: "today", label: "Today", icon: Sun },
-    { id: "upcoming", label: "Upcoming", icon: CalendarDays },
+    { id: "upcoming", label: "Upcoming", icon: CalendarChevronsRight },
     { id: "tasks", label: "All tasks", icon: Layers3 },
     { id: "calendar", label: "Calendar", icon: CalendarDays },
   ] as const;

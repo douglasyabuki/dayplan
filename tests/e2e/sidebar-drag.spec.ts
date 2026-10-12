@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 async function seed(page: Page, board = false, projectCount = 1, tagCount = 0) {
   await page.addInitScript(() =>
@@ -48,7 +48,7 @@ async function seed(page: Page, board = false, projectCount = 1, tagCount = 0) {
     { board, projectCount, tagCount },
   );
   // Match the existing dev server's origin: Next blocks dev assets from other origins.
-  await page.goto("http://localhost:3000/inbox");
+  await page.goto("/inbox");
   await expect(page.locator("[data-task-item]").first()).toBeVisible();
 }
 

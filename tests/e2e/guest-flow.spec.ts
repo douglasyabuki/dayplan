@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 const onboardingKey = "dayplan.onboarding.v1";
 const workspaceKey = "dayplan.workspace.v2";
@@ -32,12 +32,81 @@ async function openAccount(page: Page) {
     .getByRole("button", { name: /^Account and workspace settings for/ })
     .first()
     .click();
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(
     dialog.getByRole("textbox", { name: "Name", exact: true }),
   ).toBeVisible();
   return dialog;
 }
+
+test("account menu opens to the right, supports keyboard dismissal, and offers guest sign-in", async ({
+  page,
+}) => {
+  await returningGuest(page);
+  const trigger = page
+    .getByRole("button", { name: /^Account and workspace settings for/ })
+    .first();
+  await trigger.click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Settings",
+    "Sign in",
+    "Sign up",
+  ]);
+  const triggerBounds = await trigger.boundingBox();
+  const menuBounds = await menu.boundingBox();
+  expect(menuBounds!.x).toBeGreaterThan(
+    triggerBounds!.x + triggerBounds!.width,
+  );
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  await trigger.press("ArrowDown");
+  await expect(
+    menu.getByRole("menuitem", { name: "Settings", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/sign-in\?next=/);
+  expect(new URL(page.url()).searchParams.get("next")).toBe("/today");
+  await expect(
+    page.getByRole("heading", { name: "Welcome back" }),
+  ).toBeVisible();
+});
+
+test("guest avatar links to sign-up without changing the guest workspace or profile", async ({
+  page,
+}) => {
+  await returningGuest(page);
+  const before = await page.evaluate(() => ({
+    workspace: localStorage.getItem("dayplan.workspace.v2"),
+    profile: localStorage.getItem("dayplan.guest-profile.v1"),
+  }));
+  await page
+    .getByRole("button", { name: /^Account and workspace settings for/ })
+    .first()
+    .click();
+  const menu = page.getByRole("menu");
+  await expect(
+    menu.getByRole("menuitem", { name: "Sign out", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    menu.getByRole("menuitem", { name: "Sign in", exact: true }),
+  ).toHaveAttribute("href", "/sign-in?next=%2Ftoday");
+  await menu.getByRole("menuitem", { name: "Sign up", exact: true }).click();
+  await expect(page).toHaveURL(/\/sign-up\?next=/);
+  await expect(
+    page.getByRole("heading", { name: "Create your account", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => ({
+      workspace: localStorage.getItem("dayplan.workspace.v2"),
+      profile: localStorage.getItem("dayplan.guest-profile.v1"),
+    })),
+  ).toEqual(before);
+});
 
 test("first root visit offers guest entry with keyboard focus and leaves storage untouched before Continue", async ({
   page,
@@ -47,9 +116,11 @@ test("first root visit offers guest entry with keyboard focus and leaves storage
     page.getByRole("heading", { name: "Welcome to Dayplan" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Create an account/ }),
-  ).toBeDisabled();
-  await expect(page.getByRole("button", { name: /Sign in/ })).toBeDisabled();
+    page.getByRole("link", { name: "Sign in", exact: true }).first(),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("link", { name: "Sign up", exact: true }).first(),
+  ).toBeVisible();
   expect(
     await page.evaluate((key) => localStorage.getItem(key), workspaceKey),
   ).toBeNull();

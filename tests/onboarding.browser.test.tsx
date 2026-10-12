@@ -28,6 +28,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   localStorage.clear();
   navigation.replace.mockClear();
+  navigation.params = new URLSearchParams("sort=title");
 });
 
 function Root({
@@ -43,6 +44,45 @@ function Root({
     </SessionProvider>
   );
 }
+
+test("welcome waits for the session, then redirects signed-in users without entry choices", async () => {
+  const view = (session: Session) => (
+    <Root session={session}>
+      <Welcome />
+    </Root>
+  );
+  const screen = await render(view({ status: "loading" }));
+  await expect
+    .element(
+      screen.getByRole("button", { name: "Continue without an account" }),
+    )
+    .not.toBeInTheDocument();
+  expect(navigation.replace).not.toHaveBeenCalled();
+  await screen.rerender(view({ status: "authenticated", userId: "account" }));
+  expect(navigation.replace).toHaveBeenCalledWith("/today");
+  await expect
+    .element(screen.getByText("Welcome to Dayplan"))
+    .not.toBeInTheDocument();
+  expect(localStorage.getItem(ONBOARDING_KEY)).toBeNull();
+});
+
+test.each([
+  ["/inbox?sort=title#task", "/inbox?sort=title#task"],
+  ["https://example.com/inbox", "/today"],
+  ["/welcome", "/today"],
+  ["javascript:alert(1)", "/today"],
+])(
+  "signed-in welcome destination %s resolves to %s",
+  async (next, expected) => {
+    navigation.params = new URLSearchParams({ next });
+    await render(
+      <Root session={{ status: "authenticated", userId: "account" }}>
+        <Welcome />
+      </Root>,
+    );
+    expect(navigation.replace).toHaveBeenCalledWith(expected);
+  },
+);
 
 test("pending session never redirects or mounts the workspace; missing marker requires entry", async () => {
   const mounted = vi.fn();

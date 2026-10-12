@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "./fixtures";
 
 const key = "dayplan.workspace.v2";
 const card = (page: Page, id: string) =>
@@ -126,7 +126,7 @@ async function over(page: Page, locator: Locator) {
   await page.mouse.move(
     box.x + Math.min(box.width / 2, 110),
     box.y + Math.min(box.height / 2, 20),
-    { steps: 20 },
+    { steps: 5 },
   );
   const settled = (await locator.boundingBox())!;
   await page.mouse.move(

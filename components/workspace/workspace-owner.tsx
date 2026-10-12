@@ -2,6 +2,7 @@
 
 import { type ReactNode, useMemo } from "react";
 
+import { AuthControls, SessionError } from "@/components/account/auth-controls";
 import {
   guestProfileDataSource,
   type ProfileDataSource,
@@ -13,6 +14,7 @@ import {
   type WorkspaceOwner,
 } from "@/stores/session/model";
 import { useSession } from "@/stores/session/provider";
+import { accountDataSources } from "@/stores/workspace/account-data-source";
 import type { WorkspaceDataSource } from "@/stores/workspace/data-source";
 import { guestWorkspaceDataSource } from "@/stores/workspace/persistence";
 import { WorkspaceProvider } from "@/stores/workspace/provider";
@@ -40,10 +42,10 @@ export function WorkspaceOwnerBoundary({
   const session = useSession();
   const key =
     session.status === "authenticated"
-      ? `account:${session.userId}`
+      ? `account:${session.userId}:${session.sessionId ?? "injected"}`
       : session.status;
   const sources = useMemo(() => {
-    if (session.status === "loading") return null;
+    if (session.status === "loading" || session.status === "error") return null;
     const owner: WorkspaceOwner =
       session.status === "guest"
         ? guestOwner
@@ -52,7 +54,9 @@ export function WorkspaceOwnerBoundary({
       ? resolveDataSources(owner)
       : owner.kind === "guest"
         ? guestSources
-        : null;
+        : session.status === "authenticated" && session.sessionId
+          ? accountDataSources(session.userId, session.sessionId)
+          : null;
     if (
       resolved &&
       (ownerKey(resolved.workspace.owner) !== ownerKey(owner) ||
@@ -63,8 +67,15 @@ export function WorkspaceOwnerBoundary({
     return resolved;
   }, [session, resolveDataSources]);
   if (session.status === "loading") return <WorkspaceLoading />;
+  if (session.status === "error")
+    return <SessionError message={session.message} />;
   if (!sources)
-    return <p role="alert">Account workspace access is not available yet.</p>;
+    return (
+      <div className="flex flex-col gap-3 p-6">
+        <p role="alert">Account workspace access is not available yet.</p>
+        <AuthControls authenticated />
+      </div>
+    );
   return (
     <AccountProvider key={key} dataSource={sources.profile}>
       <WorkspaceProvider dataSource={sources.workspace}>

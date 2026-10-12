@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "./fixtures";
 
 const key = "dayplan.workspace.v2";
 const card = (page: Page, id: string) =>
@@ -60,7 +60,7 @@ async function seed(page: Page, board: boolean) {
     },
     { key, board },
   );
-  await page.goto("http://localhost:3000/inbox?status=all");
+  await page.goto("/inbox?status=all");
   await expect(card(page, "parent")).toBeVisible();
 }
 async function expand(page: Page, id: string) {

@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 const key = "dayplan.workspace.v2";
 async function seed(page: Page, legacy = false) {

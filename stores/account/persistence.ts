@@ -1,9 +1,10 @@
+import { notifyGuestDataChanged } from "@/stores/persistence/guest-events";
 import { guestOwner, type WorkspaceOwner } from "@/stores/session/model";
 
 import { type AccountProfile, guestProfile } from "./model";
 
 export const GUEST_PROFILE_KEY = "dayplan.guest-profile.v1";
-const LEGACY_KEY = "dayplan.account.v1";
+export const LEGACY_KEY = "dayplan.account.v1";
 
 /** Stable, owner-bound profile adapter; reuse the instance for returning owners. */
 export interface ProfileDataSource {
@@ -43,6 +44,7 @@ export function writeGuestProfile(profile: AccountProfile) {
     GUEST_PROFILE_KEY,
     JSON.stringify({ name: profile.name }),
   );
+  notifyGuestDataChanged();
 }
 
 export const guestProfileDataSource: ProfileDataSource = {

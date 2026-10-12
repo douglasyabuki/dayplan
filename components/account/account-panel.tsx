@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera } from "lucide-react";
+import { Camera, KeyRound, UserRoundX } from "lucide-react";
 import {
   type Ref,
   useEffect,
@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAccount } from "@/stores/account/provider";
 
 import { AccountAvatar } from "./account-avatar";
+import { AuthControls } from "./auth-controls";
 
 export type AccountEditHandle = { commit: () => void; cancel: () => void };
 
@@ -96,6 +97,7 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
 
   return (
     <div className="flex flex-col gap-6">
+      <AuthControls authenticated={capabilities.hasAccount} />
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -130,6 +132,7 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
           <FieldLabel htmlFor="account-name">Name</FieldLabel>
           <Input
             id="account-name"
+            maxLength={capabilities.hasAccount ? 120 : undefined}
             value={draft}
             disabled={!ready || updateStatus === "pending"}
             aria-invalid={error || !!updateError}
@@ -182,15 +185,16 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
           <FieldDescription>
             {capabilities.hasAccount
               ? "Your account profile."
-              : "Your guest profile and workspace are saved in this browser. Account access is coming later."}
+              : "Your guest profile and workspace are saved in this browser. Sign in with Google to use an account."}
           </FieldDescription>
         </Field>
       </FieldGroup>
       {storageError && (
         <Alert>
           <AlertDescription>
-            Your browser could not save guest profile changes. Changes remain
-            available in this session.
+            {capabilities.hasAccount
+              ? "Your account profile could not be loaded or saved. Please retry."
+              : "Your browser could not save guest profile changes. Changes remain available in this session."}
           </AlertDescription>
         </Alert>
       )}
@@ -200,11 +204,12 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
           <p className="text-sm font-medium">Password</p>
           <p className="text-muted-foreground text-sm">
             {capabilities.hasAccount
-              ? "Not available yet"
-              : "Requires an account. Account access is coming later."}
+              ? "You sign in with Google; a Dayplan password is not required."
+              : "Sign in with Google to use an account."}
           </p>
         </div>
         <Button variant="outline" disabled>
+          <KeyRound data-icon="inline-start" aria-hidden="true" />
           Change password
         </Button>
       </div>
@@ -215,10 +220,11 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
           <p className="text-muted-foreground text-sm">
             {capabilities.hasAccount
               ? "Not available yet"
-              : "Guests have no account to delete. Account access is coming later."}
+              : "Guests have no account to delete."}
           </p>
         </div>
         <Button variant="destructive" disabled>
+          <UserRoundX data-icon="inline-start" aria-hidden="true" />
           Delete account
         </Button>
       </div>
