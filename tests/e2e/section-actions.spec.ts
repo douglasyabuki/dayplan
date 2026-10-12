@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 const key = "dayplan.workspace.v2";
 async function seed(page: import("@playwright/test").Page, board: boolean) {

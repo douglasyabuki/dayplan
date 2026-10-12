@@ -1,4 +1,23 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
+
+test.describe("before hydration", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("Google sign-in is unavailable until the page is interactive", async ({
+    page,
+  }) => {
+    await page.goto("/sign-in");
+    const signIn = page.getByRole("button", { name: "Continue with Google" });
+    // Static production pages show their Suspense fallback before JavaScript;
+    // dynamically rendered pages can already show the disabled button.
+    await expect(
+      signIn.or(
+        page.getByRole("status").filter({ hasText: "Loading sign in" }),
+      ),
+    ).toBeVisible();
+    await expect(signIn.and(page.locator(":enabled"))).toHaveCount(0);
+  });
+});
 
 test("Google sign-in preserves the destination, supports retry, and leaves guest data untouched", async ({
   page,

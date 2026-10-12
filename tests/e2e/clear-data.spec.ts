@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
-
 import { seedWorkspace } from "../../lib/workspace/seed";
+import { expect, test } from "./fixtures";
 
 test("Settings Data confirms clear, preserves the guest profile and preferences, and stays empty after reload", async ({
   page,

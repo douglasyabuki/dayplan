@@ -231,7 +231,7 @@ function accountView(userId = crypto.randomUUID()) {
   );
 }
 
-test("dismissed workspace guest decision remains available in Account settings", async () => {
+test("dismissed workspace guest decision remains available in Data settings only", async () => {
   guestFixture();
   const api = mockImportApi();
   const sources = accountDataSources(crypto.randomUUID(), "session");
@@ -245,11 +245,17 @@ test("dismissed workspace guest decision remains available in Account settings",
     >
       <WorkspaceProvider dataSource={sources.workspace}>
         <WorkspaceFeedback />
-        <AccountPanel />
+        <div data-testid="account-settings">
+          <AccountPanel />
+        </div>
+        <DataPanel onReset={() => {}} onClear={() => {}} />
       </WorkspaceProvider>
     </AccountProvider>,
   );
   await screen.getByRole("button", { name: "Close", exact: true }).click();
+  await expect
+    .element(screen.getByTestId("account-settings"))
+    .not.toHaveTextContent("Guest data available");
   await expect
     .element(screen.getByRole("region", { name: "Guest data" }))
     .toBeVisible();

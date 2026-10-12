@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 const key = "dayplan.workspace.v2";
 const baseTask = (id: string, order: number) => ({
@@ -292,13 +292,24 @@ test("recurrence scope is explicit and the shared editor keeps changes staged", 
   await alpha
     .getByRole("button", { name: "Edit Alpha task", exact: true })
     .click();
-  await page.getByRole("button", { name: "Priority: low" }).last().click();
-  await popup(page).getByRole("button", { name: "High", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Edit task", exact: true });
+  await editor
+    .getByRole("button", { name: "Priority: low", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Priority", exact: true })
+    .getByRole("button", { name: "High", exact: true })
+    .click();
+  await expect(
+    editor.getByRole("button", { name: "Priority: high", exact: true }),
+  ).toBeVisible();
   state = await stored(page);
   expect(state.tasks.find((t: { id: string }) => t.id === "a").priority).toBe(
     "medium",
   );
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await editor
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
   await expect(
     alpha.getByRole("button", { name: "Priority: high" }),
   ).toBeVisible();

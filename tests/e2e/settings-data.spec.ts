@@ -1,8 +1,7 @@
-import { expect, type Page, test } from "@playwright/test";
-
 import { emptyWorkspace } from "../../lib/workspace/empty";
 import { seedWorkspace } from "../../lib/workspace/seed";
 import type { Workspace } from "../../types-and-constants/workspace";
+import { expect, type Page, test } from "./fixtures";
 
 async function signedInAccount(page: Page) {
   let snapshot: Workspace = {

@@ -3,6 +3,7 @@
 import { ArrowLeft, Sunrise } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useSyncExternalStore } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -16,7 +17,15 @@ import {
 } from "@/components/ui/card";
 import { useSessionActions } from "@/stores/session/provider";
 
+const subscribe = () => () => {};
+
 export function AuthScreen({ mode }: { mode: "sign-in" | "sign-up" }) {
+  // Keep the server-rendered button disabled until its click handler is ready.
+  const hydrated = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
   const params = useSearchParams();
   const signingUp = mode === "sign-up";
   const actions = useSessionActions();
@@ -69,7 +78,7 @@ export function AuthScreen({ mode }: { mode: "sign-in" | "sign-up" }) {
               type="button"
               size="lg"
               className="w-full"
-              disabled={!actions || actions.busy}
+              disabled={!hydrated || !actions || actions.busy}
               aria-busy={actions?.busy}
               onClick={() => void actions?.signIn(next ?? undefined)}
             >
