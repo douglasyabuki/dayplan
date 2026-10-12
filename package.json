@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "vercel-build": "prisma generate && prisma migrate deploy && next build",
     "db:check": "node --conditions=react-server --import tsx scripts/verify-db.ts",
     "test:account": "vitest run --project unit tests/unit/account-persistence.unit.test.ts tests/unit/account-data-source.unit.test.ts tests/unit/guest-import.unit.test.ts",
     "start": "next start",
