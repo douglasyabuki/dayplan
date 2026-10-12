@@ -71,6 +71,7 @@ type Context = {
   retrySave: () => void;
   reloadSaved: () => void;
   downloadBackup: () => void;
+  restoreBackup: (snapshot: unknown) => void;
   previewGuestImport: (snapshot: Workspace) => Promise<ImportPreview>;
   importGuest: (snapshot: Workspace, token: string) => Promise<boolean>;
   retryImport: () => Promise<boolean>;
@@ -326,6 +327,55 @@ export function WorkspaceProvider({
     });
   }
 
+  function restoreBackup(value: unknown) {
+    if (!persistence.current?.active || !ready || editsBlocked() || error)
+      return;
+    let snapshot: Workspace;
+    try {
+      snapshot = validateWorkspace(value);
+    } catch {
+      setOperationError(
+        "Choose a valid Dayplan JSON backup. Your workspace has not been changed.",
+      );
+      return;
+    }
+    setConfirmation({
+      title: "Restore backup?",
+      confirmLabel: "Restore backup",
+      description: `This replaces your entire workspace ${database ? "in your account" : "in this browser"}, including tasks, projects, tags, theme, and timezone, with the backup. Your profile is kept. Download a backup of your current workspace first if you want to keep it. This cannot be undone.`,
+      action: () => {
+        const scope = persistence.current;
+        if (!scope?.active || editsBlocked() || error) return;
+        busyRef.current = true;
+        setBusy(true);
+        void scope
+          .exclusive(async (signal) => {
+            await dataSource.save(snapshot, signal);
+          })
+          .then(() => {
+            if (!scope.active) return;
+            commit(snapshot);
+            setNotice(null);
+            setOperationError("");
+            toast.add({ title: "Backup restored", type: "success" });
+          })
+          .catch((cause: unknown) => {
+            if (scope.active)
+              storageFailure(
+                "The backup could not be saved. Your current workspace has been kept.",
+                cause,
+              );
+          })
+          .finally(() => {
+            if (scope.active) {
+              busyRef.current = false;
+              setBusy(false);
+            }
+          });
+      },
+    });
+  }
+
   function downloadBackup() {
     try {
       const snapshot = validateWorkspace(current.current);
@@ -455,6 +505,7 @@ export function WorkspaceProvider({
         retrySave,
         reloadSaved,
         downloadBackup,
+        restoreBackup,
         previewGuestImport,
         hasPendingImport:
           dataSource instanceof AccountWorkspaceDataSource &&

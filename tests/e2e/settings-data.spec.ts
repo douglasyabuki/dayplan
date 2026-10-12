@@ -70,6 +70,45 @@ async function openSettings(page: Page) {
   return page.getByRole("dialog", { name: "Settings", exact: true });
 }
 
+test("Data settings restores a JSON backup after closing Settings and confirming", async ({
+  page,
+}) => {
+  const account = await signedInAccount(page);
+  const backup = { ...seedWorkspace("UTC"), theme: "light" as const };
+  await page.goto("/today");
+  const settings = await openSettings(page);
+  await settings.getByRole("button", { name: "Data", exact: true }).click();
+  await settings.getByLabel("Backup file").setInputFiles({
+    name: "backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(backup)),
+  });
+  const confirmation = page.getByRole("dialog", {
+    name: "Restore backup?",
+    exact: true,
+  });
+  await expect(settings).not.toBeVisible();
+  await expect(confirmation).toBeVisible();
+  await expect(
+    confirmation.getByRole("button", { name: "Cancel", exact: true }),
+  ).toBeFocused();
+  expect(account.writes).toHaveLength(0);
+  await confirmation
+    .getByRole("button", { name: "Restore backup", exact: true })
+    .click();
+  await expect.poll(() => account.snapshot()).toEqual(backup);
+  await expect(
+    page.getByText("Backup restored", { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  const reopened = await openSettings(page);
+  await reopened.getByRole("button", { name: "Data", exact: true }).click();
+  await expect(
+    reopened.getByText("Timezone: UTC", { exact: true }),
+  ).toBeVisible();
+  expect(account.snapshot()).toEqual(backup);
+});
+
 test("signed-in Data settings exports, confirms sample replacement, preserves preferences, and persists after reload", async ({
   page,
 }) => {

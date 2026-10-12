@@ -1,5 +1,6 @@
 "use client";
 
+import { Import, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -109,12 +110,14 @@ function GuestImportContent({ always }: { always: boolean }) {
           setDiscard(workspace.guestData);
         }}
       >
+        <Trash2 data-icon="inline-start" aria-hidden="true" />
         Discard guest data
       </Button>
       <Button
         disabled={!guest || blocked || !!workspace.error}
         onClick={() => void inspect()}
       >
+        <Import data-icon="inline-start" aria-hidden="true" />
         Import guest data
       </Button>
     </>
@@ -180,9 +183,11 @@ function GuestImportContent({ always }: { always: boolean }) {
               disabled={pending}
               onClick={() => setPreview(null)}
             >
+              <X data-icon="inline-start" aria-hidden="true" />
               Cancel
             </Button>
             <Button disabled={blocked} onClick={() => void importConfirmed()}>
+              <Import data-icon="inline-start" aria-hidden="true" />
               {pending ? "Importing..." : "Confirm import"}
             </Button>
           </DialogFooter>
@@ -208,6 +213,7 @@ function GuestImportContent({ always }: { always: boolean }) {
               variant="outline"
               onClick={() => setDiscard(null)}
             >
+              <X data-icon="inline-start" aria-hidden="true" />
               Cancel
             </Button>
             <Button
@@ -220,6 +226,7 @@ function GuestImportContent({ always }: { always: boolean }) {
                 if (success) setDismissed(true);
               }}
             >
+              <Trash2 data-icon="inline-start" aria-hidden="true" />
               Confirm discard
             </Button>
           </DialogFooter>

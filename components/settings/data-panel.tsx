@@ -1,20 +1,45 @@
 "use client";
 
+import {
+  CloudDownload,
+  Download,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
 import { GuestImportPanel } from "@/components/account/guest-import-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useWorkspace } from "@/stores/workspace/provider";
+import { validateWorkspace } from "@/stores/workspace/validation";
+import type { Workspace } from "@/types-and-constants/workspace";
 
 export function DataPanel({
   onReset,
   onClear,
   onReload,
+  onRestore,
 }: {
   onReset: () => void;
   onClear: () => void;
   onReload?: () => void;
+  onRestore?: (snapshot: Workspace) => void;
 }) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const active = useRef(true);
+  const [reading, setReading] = useState(false);
+  const [backupError, setBackupError] = useState("");
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const workspace = useWorkspace();
   const {
     state,
@@ -29,6 +54,7 @@ export function DataPanel({
     hasPendingGuestCleanup,
     retryGuestCleanup,
     downloadBackup,
+    restoreBackup,
     retryImport,
     retrySave,
     reloadSaved,
@@ -38,6 +64,21 @@ export function DataPanel({
   const disabled = !ready || busy || hasPendingImport || (account && !!error);
   const guestAvailable =
     account && (guestData?.snapshot || guestDataError || guestCleanupError);
+  async function readBackup(file: File) {
+    setReading(true);
+    setBackupError("");
+    try {
+      const snapshot = validateWorkspace(JSON.parse(await file.text()));
+      if (active.current) (onRestore ?? restoreBackup)(snapshot);
+    } catch {
+      if (active.current)
+        setBackupError(
+          "Choose a valid Dayplan JSON backup. Your workspace has not been changed.",
+        );
+    } finally {
+      if (active.current) setReading(false);
+    }
+  }
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2" aria-label="Your workspace">
@@ -65,6 +106,10 @@ export function DataPanel({
                     disabled={busy}
                     onClick={onReload ?? reloadSaved}
                   >
+                    <CloudDownload
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />
                     Load server version
                   </Button>
                   {hasPendingImport ? (
@@ -73,6 +118,7 @@ export function DataPanel({
                       disabled={busy}
                       onClick={() => void retryImport()}
                     >
+                      <RefreshCw data-icon="inline-start" aria-hidden="true" />
                       Retry import
                     </Button>
                   ) : (
@@ -83,6 +129,7 @@ export function DataPanel({
                         disabled={busy}
                         onClick={retrySave}
                       >
+                        <Save data-icon="inline-start" aria-hidden="true" />
                         Retry save
                       </Button>
                     )
@@ -90,6 +137,7 @@ export function DataPanel({
                 </>
               ) : (
                 <Button variant="outline" onClick={() => location.reload()}>
+                  <RefreshCw data-icon="inline-start" aria-hidden="true" />
                   Retry loading
                 </Button>
               )}
@@ -111,6 +159,7 @@ export function DataPanel({
                   disabled={busy}
                   onClick={retryGuestCleanup}
                 >
+                  <RefreshCw data-icon="inline-start" aria-hidden="true" />
                   Retry cleanup
                 </Button>
               )}
@@ -128,8 +177,40 @@ export function DataPanel({
           </p>
         </div>
         <Button variant="outline" disabled={!ready} onClick={downloadBackup}>
+          <Download data-icon="inline-start" aria-hidden="true" />
           Download backup
         </Button>
+        <p className="text-muted-foreground text-sm leading-normal">
+          Restore a downloaded JSON backup to replace your entire workspace,
+          including theme and timezone. You will be asked to confirm.
+        </p>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".json,application/json"
+          aria-label="Backup file"
+          hidden
+          disabled={disabled || !!error || reading}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = "";
+            if (file) void readBackup(file);
+          }}
+        />
+        <Button
+          variant="outline"
+          disabled={disabled || !!error || reading}
+          onClick={() => fileInput.current?.click()}
+        >
+          <Upload data-icon="inline-start" aria-hidden="true" />
+          {reading ? "Reading backup..." : "Restore backup"}
+        </Button>
+        {backupError && (
+          <Alert variant="destructive">
+            <AlertTitle>Backup could not be read</AlertTitle>
+            <AlertDescription>{backupError}</AlertDescription>
+          </Alert>
+        )}
       </section>
       <Separator />
       <section
@@ -146,6 +227,7 @@ export function DataPanel({
           </p>
         </div>
         <Button variant="outline" disabled={disabled} onClick={onReset}>
+          <RotateCcw data-icon="inline-start" aria-hidden="true" />
           Reset to sample data
         </Button>
       </section>
@@ -163,6 +245,7 @@ export function DataPanel({
           </p>
         </div>
         <Button variant="destructive" disabled={disabled} onClick={onClear}>
+          <Trash2 data-icon="inline-start" aria-hidden="true" />
           Clear data
         </Button>
       </section>

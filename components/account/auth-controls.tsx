@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  LogIn,
+  LogOut,
+  RefreshCw,
+  UserRoundPlus,
+  UsersRound,
+} from "lucide-react";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useSessionActions } from "@/stores/session/provider";
@@ -23,6 +31,7 @@ export function AuthControls({
               disabled={actions.busy}
               onClick={() => void actions.switchAccount(destination)}
             >
+              <UsersRound data-icon="inline-start" aria-hidden="true" />
               Switch Google account
             </Button>
             <Button
@@ -30,6 +39,7 @@ export function AuthControls({
               disabled={actions.busy}
               onClick={() => void actions.signOut()}
             >
+              <LogOut data-icon="inline-start" aria-hidden="true" />
               Sign out
             </Button>
           </>
@@ -43,6 +53,7 @@ export function AuthControls({
                   : "/sign-in"
               }
             >
+              <LogIn data-icon="inline-start" aria-hidden="true" />
               Sign in
             </a>
             <a
@@ -53,6 +64,7 @@ export function AuthControls({
                   : "/sign-up"
               }
             >
+              <UserRoundPlus data-icon="inline-start" aria-hidden="true" />
               Sign up
             </a>
           </>
@@ -77,6 +89,7 @@ export function SessionError({ message }: { message: string }) {
         disabled={actions?.busy}
         onClick={() => void actions?.retry()}
       >
+        <RefreshCw data-icon="inline-start" aria-hidden="true" />
         Retry session
       </Button>
     </Alert>

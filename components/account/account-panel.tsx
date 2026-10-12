@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera } from "lucide-react";
+import { Camera, KeyRound, UserRoundX } from "lucide-react";
 import {
   type Ref,
   useEffect,
@@ -209,6 +209,7 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
           </p>
         </div>
         <Button variant="outline" disabled>
+          <KeyRound data-icon="inline-start" aria-hidden="true" />
           Change password
         </Button>
       </div>
@@ -223,6 +224,7 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
           </p>
         </div>
         <Button variant="destructive" disabled>
+          <UserRoundX data-icon="inline-start" aria-hidden="true" />
           Delete account
         </Button>
       </div>

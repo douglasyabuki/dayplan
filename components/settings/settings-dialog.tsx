@@ -27,6 +27,7 @@ import { useAccount } from "@/stores/account/provider";
 import { useWorkspace } from "@/stores/workspace/provider";
 
 import type { SettingsPanel } from "../../types-and-constants/settings";
+import type { Workspace } from "../../types-and-constants/workspace";
 import { AboutPanel } from "./about-panel";
 import { AppearancePanel } from "./appearance-panel";
 import { DataPanel } from "./data-panel";
@@ -55,8 +56,9 @@ export function SettingsDialog({
   const dataActionAfterClose = useRef<"reset" | "clear" | "reload" | null>(
     null,
   );
+  const backupAfterClose = useRef<Workspace | null>(null);
   const { ready } = useAccount();
-  const { reset, clearData, reloadSaved } = useWorkspace();
+  const { reset, clearData, reloadSaved, restoreBackup } = useWorkspace();
 
   function close(cancel = false) {
     if (cancel) edit.current?.cancel();
@@ -86,6 +88,7 @@ export function SettingsDialog({
           if (dataActionAfterClose.current === "reset") reset();
           if (dataActionAfterClose.current === "clear") clearData();
           if (dataActionAfterClose.current === "reload") reloadSaved();
+          if (backupAfterClose.current) restoreBackup(backupAfterClose.current);
         }
       }}
     >
@@ -189,6 +192,10 @@ export function SettingsDialog({
               {panel === "about" && <AboutPanel />}
               {panel === "data" && (
                 <DataPanel
+                  onRestore={(snapshot) => {
+                    backupAfterClose.current = snapshot;
+                    close();
+                  }}
                   onReload={() => {
                     dataActionAfterClose.current = "reload";
                     close();

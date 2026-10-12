@@ -141,7 +141,8 @@ export function WorkspaceFeedback() {
             />
           )}
           <DialogFooter>
-            {confirmation?.title === "Load the saved workspace?" && (
+            {(confirmation?.title === "Load the saved workspace?" ||
+              confirmation?.title === "Restore backup?") && (
               <Button variant="outline" onClick={downloadBackup}>
                 Download local backup
               </Button>
