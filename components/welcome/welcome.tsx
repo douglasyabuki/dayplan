@@ -3,16 +3,14 @@
 import {
   ArrowDown,
   ArrowRight,
-  CalendarDays,
   CheckCircle2,
   Circle,
-  FolderKanban,
-  Inbox,
   Laptop,
   Sun,
   Sunrise,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 
 import { AuthControls, SessionError } from "@/components/account/auth-controls";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -27,33 +25,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { features } from "@/components/welcome/features";
+import { WorkspaceLoading } from "@/components/workspace/workspace-loading";
 import { safeWorkspaceDestination } from "@/lib/workspace/entry";
 import { useOnboarding } from "@/stores/onboarding/provider";
 import { useSession } from "@/stores/session/provider";
-
-const features = [
-  {
-    icon: Inbox,
-    title: "A place for every idea",
-    description:
-      "Capture tasks in your Inbox as they come to mind. Give them a priority, add a deadline, and find your next step.",
-    detail: "Less to remember. More room to think.",
-  },
-  {
-    icon: FolderKanban,
-    title: "Bring your projects together",
-    description:
-      "Organize work and life with projects, sections, and tags. Switch between lists and boards to see things your way.",
-    detail: "From the big picture to the little details.",
-  },
-  {
-    icon: CalendarDays,
-    title: "Make a plan for your time",
-    description:
-      "Focus on what matters in Today, then give tasks a place in your calendar. Plan by day, week, or month.",
-    detail: "A little structure for the day ahead.",
-  },
-];
 
 export function Welcome() {
   const router = useRouter();
@@ -62,6 +38,17 @@ export function Welcome() {
   const { ready, continueAsGuest, storageError } = useOnboarding();
   const authenticated = session.status === "authenticated";
   const destination = params.get("next") ?? undefined;
+
+  useEffect(() => {
+    if (authenticated) {
+      router.replace(
+        safeWorkspaceDestination(destination ?? null, window.location.origin),
+      );
+    }
+  }, [authenticated, destination, router]);
+
+  if (session.status === "loading" || authenticated)
+    return <WorkspaceLoading />;
 
   return (
     <div className="min-h-dvh">
@@ -75,10 +62,7 @@ export function Welcome() {
           </span>
         </div>
         <nav aria-label="Account">
-          <AuthControls
-            authenticated={authenticated}
-            destination={destination}
-          />
+          <AuthControls authenticated={false} destination={destination} />
         </nav>
       </header>
 
@@ -106,31 +90,25 @@ export function Welcome() {
             </p>
             <div className="flex w-full max-w-md flex-col gap-4 pt-2">
               <div className="flex flex-col gap-3 sm:flex-row">
-                {!authenticated && (
-                  <a
-                    className={buttonVariants({
-                      size: "lg",
-                      className: "w-full sm:w-auto sm:min-w-32",
-                    })}
-                    href={
-                      destination
-                        ? `/sign-up?next=${encodeURIComponent(destination)}`
-                        : "/sign-up"
-                    }
-                  >
-                    Sign up
-                    <ArrowRight data-icon="inline-end" aria-hidden="true" />
-                  </a>
-                )}
+                <a
+                  className={buttonVariants({
+                    size: "lg",
+                    className: "w-full sm:w-auto sm:min-w-32",
+                  })}
+                  href={
+                    destination
+                      ? `/sign-up?next=${encodeURIComponent(destination)}`
+                      : "/sign-up"
+                  }
+                >
+                  Sign up
+                  <ArrowRight data-icon="inline-end" aria-hidden="true" />
+                </a>
                 <Button
                   size="lg"
-                  variant={authenticated ? "default" : "outline"}
+                  variant="outline"
                   className="w-full sm:w-auto"
-                  disabled={
-                    !ready ||
-                    session.status === "loading" ||
-                    session.status === "error"
-                  }
+                  disabled={!ready || session.status === "error"}
                   onClick={() => {
                     const next = safeWorkspaceDestination(
                       params.get("next"),
@@ -140,20 +118,13 @@ export function Welcome() {
                     router.replace(next);
                   }}
                 >
-                  {authenticated
-                    ? "Open your account workspace"
-                    : "Continue without an account"}
-                  {authenticated && (
-                    <ArrowRight data-icon="inline-end" aria-hidden="true" />
-                  )}
+                  Continue without an account
                 </Button>
               </div>
-              {!authenticated && (
-                <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
-                  Just exploring? The full workspace is yours to try. Guest
-                  plans stay in this browser and don’t sync across devices.
-                </p>
-              )}
+              <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
+                Just exploring? The full workspace is yours to try. Guest plans
+                stay in this browser and don’t sync across devices.
+              </p>
               {session.status === "error" && (
                 <SessionError message={session.message} />
               )}
@@ -242,7 +213,7 @@ export function Welcome() {
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <AuthControls
-                authenticated={session.status === "authenticated"}
+                authenticated={false}
                 destination={params.get("next") ?? undefined}
               />
             </div>

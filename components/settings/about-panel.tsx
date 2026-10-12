@@ -3,6 +3,7 @@
 import { ArrowUpRight, Sunrise } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { features } from "@/components/welcome/features";
 
 export function AboutPanel() {
   return (
@@ -33,6 +34,21 @@ export function AboutPanel() {
           <ArrowUpRight data-icon="inline-end" />
         </Button>
       </div>
+      <section aria-label="Getting started" className="flex flex-col gap-4">
+        <h3 className="text-sm font-medium">Getting started</h3>
+        {features.map(({ title, description }) => (
+          <div key={title} className="flex flex-col gap-1">
+            <h4 className="text-sm font-medium">{title}</h4>
+            <p className="text-muted-foreground text-sm leading-normal">
+              {description}
+            </p>
+          </div>
+        ))}
+        <p className="text-muted-foreground text-sm leading-normal">
+          Guest plans stay in this browser. When you sign in, you can import or
+          discard guest data in Account settings.
+        </p>
+      </section>
     </div>
   );
 }

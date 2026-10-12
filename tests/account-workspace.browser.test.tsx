@@ -4,12 +4,14 @@ import { useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
+import { AccountPanel } from "@/components/account/account-panel";
 import { DataPanel } from "@/components/settings/data-panel";
 import { WorkspaceFeedback } from "@/components/workspace/workspace-feedback";
 import { emptyWorkspace } from "@/lib/workspace/empty";
 import { mergeGuestWorkspace } from "@/lib/workspace/import";
 import { seedWorkspace } from "@/lib/workspace/seed";
 import { GUEST_PROFILE_KEY, LEGACY_KEY } from "@/stores/account/persistence";
+import { AccountProvider } from "@/stores/account/provider";
 import { accountDataSources } from "@/stores/workspace/account-data-source";
 import {
   readGuestData,
@@ -228,6 +230,45 @@ function accountView(userId = crypto.randomUUID()) {
     </WorkspaceProvider>
   );
 }
+
+test("dismissed workspace guest decision remains available in Account settings", async () => {
+  guestFixture();
+  const api = mockImportApi();
+  const sources = accountDataSources(crypto.randomUUID(), "session");
+  const screen = await render(
+    <AccountProvider
+      dataSource={{
+        owner: sources.profile.owner,
+        load: () => ({ name: "Account", email: "account@example.com" }),
+        save: () => {},
+      }}
+    >
+      <WorkspaceProvider dataSource={sources.workspace}>
+        <WorkspaceFeedback />
+        <AccountPanel />
+      </WorkspaceProvider>
+    </AccountProvider>,
+  );
+  await screen.getByRole("button", { name: "Close", exact: true }).click();
+  await expect
+    .element(screen.getByRole("region", { name: "Guest data" }))
+    .toBeVisible();
+  await screen
+    .getByRole("button", { name: "Discard guest data", exact: true })
+    .click();
+  await screen.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(readGuestData().snapshot).not.toBeNull();
+  await screen
+    .getByRole("button", { name: "Import guest data", exact: true })
+    .click();
+  await screen
+    .getByRole("button", { name: "Confirm import", exact: true })
+    .click();
+  await expect
+    .element(screen.getByRole("region", { name: "Guest data" }))
+    .not.toBeInTheDocument();
+  expect(api.imports()).toBe(1);
+});
 
 test("successful import cleans guest workspace and profile, preserves account items, and stays resolved after reopening", async () => {
   const guest = guestFixture();
