@@ -13,6 +13,7 @@ import {
 
 import { toast } from "@/components/ui/toast";
 import { dateKey } from "@/lib/dates";
+import type { DraftEntries } from "@/lib/tasks/editor";
 import { type TaskOperation } from "@/lib/tasks/operations";
 import { emptyWorkspace } from "@/lib/workspace/empty";
 import { seedWorkspace } from "@/lib/workspace/seed";
@@ -24,8 +25,17 @@ import {
   PersistenceError,
 } from "@/stores/workspace/account-data-source";
 import { type Action } from "@/stores/workspace/actions";
-import { taskAction, taskOperationAction } from "@/stores/workspace/commands";
+import {
+  commitDrafts,
+  taskAction,
+  taskOperationAction,
+} from "@/stores/workspace/commands";
 import type { WorkspaceDataSource } from "@/stores/workspace/data-source";
+import {
+  assertDraftsCurrent,
+  contentKey,
+  type DraftExpectation,
+} from "@/stores/workspace/draft-guard";
 import { type GuestData, readGuestData } from "@/stores/workspace/guest-data";
 import { WorkspacePersistenceSession } from "@/stores/workspace/persistence-session";
 import { reducer } from "@/stores/workspace/reducer";
@@ -70,6 +80,21 @@ type Context = {
   persistenceKind: "browser" | "database";
   recoveryCode: string;
   busy: boolean;
+  syncStatus: "Saved" | "Pending" | "Saving" | "Offline" | "Needs attention";
+  syncAvailable: boolean;
+  syncNow: () => Promise<boolean>;
+  adoptionEpoch: number;
+  readEditorState: () => Workspace;
+  commitEditorDrafts: (
+    entries: DraftEntries,
+    expectations: DraftExpectation[],
+    message: string,
+  ) => boolean;
+  operateEditor: (
+    operation: TaskOperation,
+    expectations: DraftExpectation[],
+    message: string,
+  ) => boolean;
   retrySave: () => void;
   retryRecovery: () => void;
   reloadSaved: () => void;
@@ -111,6 +136,20 @@ export function WorkspaceProvider({
   const [operationError, setOperationError] = useState("");
   const persistence = useRef<WorkspacePersistenceSession | null>(null);
   const revision = useRef(0);
+  const epoch = useRef(0);
+  const [adoptionEpoch, setAdoptionEpoch] = useState(0);
+  const [activity, setActivity] = useState({ pending: false, saving: false });
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
   const skipFailureSnapshot = useRef(false);
   const commit = useCallback(
     (next: Workspace, persistEdit = false) => {
@@ -189,13 +228,20 @@ export function WorkspaceProvider({
   const [notice, setNotice] = useState<{
     message: string;
     before: Workspace;
+    epoch: number;
   } | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [today, setToday] = useState("");
 
   useEffect(() => {
     let loaded = false;
-    const scope = new WorkspacePersistenceSession(dataSource, storageFailure);
+    const scope = new WorkspacePersistenceSession(
+      dataSource,
+      storageFailure,
+      () => {
+        if (scope.active) setActivity(scope.status);
+      },
+    );
     persistence.current = scope;
     const account =
       dataSource instanceof AccountWorkspaceDataSource ? dataSource : null;
@@ -298,7 +344,12 @@ export function WorkspaceProvider({
       actionProps: {
         children: "Undo",
         onClick: () => {
-          if (!persistence.current?.active || editsBlocked()) return;
+          if (
+            !persistence.current?.active ||
+            editsBlocked() ||
+            notice.epoch !== epoch.current
+          )
+            return;
           commit(notice.before, true);
           setOperationError("");
           setNotice(null);
@@ -321,7 +372,7 @@ export function WorkspaceProvider({
       const next = reducer(before, taskAction(before, action));
       setOperationError("");
       if (next === before) return true;
-      if (message) setNotice({ message, before });
+      if (message) setNotice({ message, before, epoch: epoch.current });
       commit(next, true);
       return true;
     } catch (cause) {
@@ -482,8 +533,7 @@ export function WorkspaceProvider({
         allowPaused,
       );
       if (!scope.active) return false;
-      commit(snapshot ?? freshWorkspace());
-      setNotice(null);
+      adoptRemote(snapshot ?? freshWorkspace());
       setOperationError("");
       setError("");
       setRecoveryCode("");
@@ -518,6 +568,92 @@ export function WorkspaceProvider({
     }
   }
 
+  function adoptRemote(snapshot: Workspace) {
+    if (contentKey(snapshot) === contentKey(current.current)) return;
+    epoch.current += 1;
+    setAdoptionEpoch(epoch.current);
+    setNotice(null);
+    setConfirmation(null);
+    commit(snapshot);
+  }
+
+  const blockingSync =
+    !!recoveryStorageError ||
+    (dataSource instanceof AccountWorkspaceDataSource &&
+      dataSource.hasPendingImport) ||
+    (!!error && recoveryCode !== "network_error");
+  const syncStatus: Context["syncStatus"] = blockingSync
+    ? "Needs attention"
+    : !online || recoveryCode === "network_error"
+      ? "Offline"
+      : busy || activity.saving
+        ? "Saving"
+        : activity.pending
+          ? "Pending"
+          : "Saved";
+  const syncAvailable = ready && database && online && !busy && !blockingSync;
+
+  async function syncNow(): Promise<boolean> {
+    const scope = persistence.current;
+    if (
+      !scope?.active ||
+      busyRef.current ||
+      !ready ||
+      !navigator.onLine ||
+      blockingSync ||
+      !(dataSource instanceof AccountWorkspaceDataSource)
+    )
+      return false;
+    busyRef.current = true;
+    setBusy(true);
+    const deadline = Date.now() + 30000;
+    try {
+      scope.saveLatest(current.current);
+      await scope.flush(deadline);
+      const snapshot = await scope.inspect(
+        (signal) => dataSource.refresh(signal),
+        deadline,
+      );
+      if (!scope.active) return false;
+      adoptRemote(snapshot ?? freshWorkspace());
+      setError("");
+      setRecoveryCode("");
+      setOperationError("");
+      scope.resume();
+      return true;
+    } catch (cause) {
+      if (scope.active)
+        storageFailure(
+          "Sync could not be completed. Your edits have been kept.",
+          cause,
+        );
+      return false;
+    } finally {
+      if (scope.active) {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    }
+  }
+
+  function guardedEditor(
+    expectations: DraftExpectation[],
+    action: () => boolean,
+  ): boolean {
+    if (!persistence.current?.active || editsBlocked()) return false;
+    try {
+      assertDraftsCurrent(current.current, expectations);
+      return action();
+    } catch (cause) {
+      setOperationError(
+        cause instanceof Error
+          ? cause.message
+          : "Review the task changes first.",
+      );
+      return false;
+    }
+  }
+
   function reloadSaved() {
     setConfirmation({
       title: "Load the saved workspace?",
@@ -530,6 +666,7 @@ export function WorkspaceProvider({
   }
 
   function retrySave() {
+    if (busyRef.current) return;
     persistence.current?.retry(current.current, () => {
       setError("");
       setRecoveryCode("");
@@ -567,6 +704,33 @@ export function WorkspaceProvider({
         persistenceKind: database ? "database" : "browser",
         recoveryCode,
         busy,
+        adoptionEpoch,
+        readEditorState: () => structuredClone(current.current),
+        syncStatus,
+        syncAvailable,
+        syncNow,
+        commitEditorDrafts: (entries, expectations, message) =>
+          guardedEditor(expectations, () => {
+            if (
+              Object.keys(entries).length !== expectations.length ||
+              expectations.some(
+                ({ entry }) =>
+                  contentKey(entries[entry.original.id]) !== contentKey(entry),
+              )
+            )
+              throw new Error("Review all draft entries before saving.");
+            return act(
+              {
+                type: "replace",
+                state: commitDrafts(current.current, entries),
+              },
+              message,
+            );
+          }),
+        operateEditor: (operation, expectations, message) =>
+          guardedEditor(expectations, () =>
+            act(taskOperationAction(current.current, operation), message),
+          ),
         retrySave,
         retryRecovery: () => {
           void exclusive((source, signal) => source.load(signal), true);
@@ -634,7 +798,13 @@ export function WorkspaceProvider({
         notice,
         confirmation,
         undo: () => {
-          if (!notice || !persistence.current?.active || editsBlocked()) return;
+          if (
+            !notice ||
+            !persistence.current?.active ||
+            editsBlocked() ||
+            notice.epoch !== epoch.current
+          )
+            return;
           commit(notice.before, true);
           setOperationError("");
           setNotice(null);
@@ -662,7 +832,14 @@ export function WorkspaceProvider({
         save,
         toggle,
         confirm: (value) => {
-          if (persistence.current?.active) setConfirmation(value);
+          const capturedEpoch = epoch.current;
+          if (persistence.current?.active)
+            setConfirmation({
+              ...value,
+              action: (choice) => {
+                if (capturedEpoch === epoch.current) value.action(choice);
+              },
+            });
         },
         reset: () => requestReset(false),
         clearData: () => requestReset(true),

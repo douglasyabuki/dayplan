@@ -25,7 +25,15 @@ export class WorkspacePersistenceSession {
   constructor(
     readonly source: WorkspaceDataSource,
     private onError: (message: string, cause?: unknown) => void,
+    private onChange: () => void = () => {},
   ) {}
+
+  get status() {
+    return {
+      pending: !!this.pending,
+      saving: this.saving || this.flushing || this.resetting,
+    };
+  }
 
   get active() {
     return !this.controller.signal.aborted;
@@ -70,6 +78,7 @@ export class WorkspacePersistenceSession {
         (cause) => {
           if (this.active) {
             this.writable = false;
+            this.onChange();
             this.onError("Saving needs coordination. Retry safely.", cause);
           }
         },
@@ -97,6 +106,7 @@ export class WorkspacePersistenceSession {
   }
 
   private schedule() {
+    if (this.active) this.onChange();
     this.cancelTimer();
     if (
       !this.active ||
@@ -120,6 +130,7 @@ export class WorkspacePersistenceSession {
   async flush(deadline: number): Promise<void> {
     this.cancelTimer();
     this.flushing = true;
+    this.onChange();
     try {
       await bounded(this.controller.signal, deadline, async (signal) => {
         await this.staging;
@@ -148,6 +159,8 @@ export class WorkspacePersistenceSession {
           }
         }
       });
+      this.failure = null;
+      this.writable = true;
     } catch (cause) {
       this.failure = cause;
       this.writable = false;
@@ -156,6 +169,7 @@ export class WorkspacePersistenceSession {
       throw cause;
     } finally {
       this.flushing = false;
+      this.schedule();
     }
   }
 
@@ -248,7 +262,17 @@ export class WorkspacePersistenceSession {
     return result;
   }
 
-  async inspect<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  async inspect<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+    deadline?: number,
+  ): Promise<T> {
+    if (deadline !== undefined)
+      return bounded(
+        this.controller.signal,
+        deadline,
+        async (signal) =>
+          await serialized(this.source, signal, () => operation(signal)),
+      );
     const result = await serialized(this.source, this.controller.signal, () =>
       operation(this.controller.signal),
     );
@@ -281,6 +305,7 @@ export class WorkspacePersistenceSession {
       () => this.source.save(snapshot, this.controller.signal),
       () => {
         this.saving = false;
+        this.failure = null;
         this.schedule();
       },
       (cause) => {
@@ -305,11 +330,18 @@ export class WorkspacePersistenceSession {
     success: (result: T) => void,
     failure: (cause: unknown) => void,
   ) {
+    this.onChange();
     const resolve = (result: T) => {
-      if (this.active) success(result);
+      if (this.active) {
+        success(result);
+        this.onChange();
+      }
     };
     const reject = (cause: unknown) => {
-      if (this.active) failure(cause);
+      if (this.active) {
+        failure(cause);
+        this.onChange();
+      }
     };
     try {
       const result = serialized(this.source, this.controller.signal, operation);

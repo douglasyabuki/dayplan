@@ -64,6 +64,8 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { compactTiming } from "@/lib/tasks/presentation";
 import type { Occurrence } from "@/types-and-constants/tasks";
 
+import { DraftReview } from "./draft-review";
+
 function useLiveTrigger(id?: string) {
   const subscribe = useCallback(
     (notify: () => void) => {
@@ -218,6 +220,7 @@ function TaskEditorPanel({
         </div>
         <Separator />
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+          <DraftReview session={session} />
           <FieldGroup>
             {task.context && (
               <EditorSelect
@@ -495,26 +498,27 @@ function TaskEditorPanel({
             >
               Cancel
             </Button>
-            <Button type="submit">
+            <Button
+              type="submit"
+              disabled={session.busy || session.conflicts.length > 0}
+            >
               {nested ? "Done" : isNew ? "Create task" : "Save changes"}
             </Button>
           </div>
         </div>
       </form>
-      {child &&
-        (session.entries[child.task.id]?.isNew ||
-          session.state.tasks.some((t) => t.id === child.task.taskId)) && (
-          <TaskEditorPanel
-            key={child.task.id}
-            task={child.task}
-            isNew={!!session.entries[child.task.id]?.isNew}
-            close={() => setChild(null)}
-            session={session}
-            nested
-            triggerId={child.triggerId}
-            popoverHandle={childHandle}
-          />
-        )}
+      {child && (
+        <TaskEditorPanel
+          key={child.task.id}
+          task={child.task}
+          isNew={!!session.entries[child.task.id]?.isNew}
+          close={() => setChild(null)}
+          session={session}
+          nested
+          triggerId={child.triggerId}
+          popoverHandle={childHandle}
+        />
+      )}
     </>
   );
   return (

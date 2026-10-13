@@ -18,6 +18,7 @@ import {
 } from "@/lib/workspace/grouping";
 import { workspaceHref } from "@/lib/workspace/routes";
 import { selectTasks } from "@/lib/workspace/selectors";
+import { contentKey } from "@/stores/workspace/draft-guard";
 import type { useWorkspace } from "@/stores/workspace/provider";
 import type { Occurrence } from "@/types-and-constants/tasks";
 import type { Workspace } from "@/types-and-constants/workspace";
@@ -69,6 +70,7 @@ export function useWorkspaceTaskEditor({
   >(null);
   const editorGuardRef = useRef<((action: () => void) => void) | null>(null);
   const [newDraft, setNewDraft] = useState<Occurrence | null>(null);
+  const [retainedTask, setRetainedTask] = useState<Occurrence | null>(null);
   const selectedTaskId = params.get("task");
   const fallbackNewTask = asOccurrence(newTask());
   let selectedTask = allTasks.find((t) => t.id === selectedTaskId);
@@ -76,6 +78,12 @@ export function useWorkspaceTaskEditor({
     const ref = parseReference(selectedTaskId);
     if (ref) selectedTask = resolveOccurrence(state, ref);
   }
+
+  if (selectedTask && contentKey(selectedTask) !== contentKey(retainedTask))
+    setRetainedTask(selectedTask);
+  else if (!selectedTask && retainedTask?.id === selectedTaskId)
+    selectedTask = retainedTask;
+  else if (!selectedTask && retainedTask) setRetainedTask(null);
 
   function open(task: Occurrence, options?: TaskOpenOptions) {
     closeTaskActions();
