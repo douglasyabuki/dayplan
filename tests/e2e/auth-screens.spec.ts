@@ -12,7 +12,7 @@ test.describe("before hydration", () => {
     // dynamically rendered pages can already show the disabled button.
     await expect(
       signIn.or(
-        page.getByRole("status").filter({ hasText: "Loading sign in" }),
+        page.getByRole("status").filter({ hasText: "Preparing sign in" }),
       ),
     ).toBeVisible();
     await expect(signIn.and(page.locator(":enabled"))).toHaveCount(0);

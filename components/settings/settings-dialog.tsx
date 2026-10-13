@@ -7,6 +7,7 @@ import {
   type AccountEditHandle,
   AccountPanel,
 } from "@/components/account/account-panel";
+import { DayplanLoading } from "@/components/shared/dayplan-loading";
 import {
   Dialog,
   DialogContent,
@@ -184,9 +185,7 @@ export function SettingsDialog({
                 (ready ? (
                   <AccountPanel ref={edit} />
                 ) : (
-                  <p role="status" className="text-muted-foreground">
-                    Loading account…
-                  </p>
+                  <DayplanLoading message="Loading your account…" />
                 ))}
               {panel === "appearance" && <AppearancePanel />}
               {panel === "about" && <AboutPanel />}
