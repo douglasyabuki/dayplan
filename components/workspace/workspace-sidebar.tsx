@@ -10,14 +10,33 @@ import {
   Inbox,
   Layers3,
   MoreHorizontal,
+  Pencil,
   Plus,
   Sun,
   Sunrise,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
 
 import { TagTree } from "@/components/tags/tag-tree";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar as BaseSidebar,
   SidebarContent,
@@ -57,7 +76,8 @@ export function WorkspaceSidebar({
   close?: () => void;
   manage: (kind: "projects" | "tags", entity?: Project) => void;
 }) {
-  const { state, today } = useWorkspace();
+  const { state, today, act, confirm } = useWorkspace();
+  const router = useRouter();
   const { open: sidebarOpen, isMobile } = useSidebar();
   const { settings, openSettings } = useWorkspaceController();
   const open = tasks.filter((t) => !t.completed && !t.archived);
@@ -77,45 +97,112 @@ export function WorkspaceSidebar({
   ] as const;
   const projectMenu = (
     <SidebarMenu>
-      {state.projects.map((project) => (
-        <SidebarMenuItem key={project.id}>
-          <ProjectTarget projectId={project.id}>
-            <div className="nav-entity group relative">
-              <SidebarMenuButton
-                render={
-                  <Link
-                    href={workspaceHref({
-                      view: "projects",
-                      selectedId: project.id,
-                    })}
-                    onClick={close}
-                  />
-                }
-                isActive={view === "projects" && selectedId === project.id}
-                size="nav"
-                className="pr-9"
-              >
-                <Folder
-                  className="size-4 shrink-0 text-(--entity-color)"
-                  data-color={project.color}
-                />
-                <span>{project.name}</span>
-              </SidebarMenuButton>
-              <SidebarMenuBadge className="right-9 text-[11px]">
-                {open.filter((t) => t.projectId === project.id).length || ""}
-              </SidebarMenuBadge>
-              <SidebarMenuAction
-                showOnHover
-                aria-label={`Edit ${project.name}`}
-                title={`Edit ${project.name}`}
-                onClick={() => manage("projects", project)}
-              >
-                <MoreHorizontal />
-              </SidebarMenuAction>
-            </div>
-          </ProjectTarget>
-        </SidebarMenuItem>
-      ))}
+      {state.projects.map((project) => {
+        const openEdit = () => manage("projects", project);
+        const deleteAction = () =>
+          confirm({
+            title: `Delete ${project.name}?`,
+            description: "Tasks in this project will move to Inbox.",
+            action: () => {
+              if (
+                act(
+                  { type: "deleteEntity", kind: "projects", id: project.id },
+                  "Project deleted",
+                ) &&
+                view === "projects" &&
+                selectedId === project.id
+              )
+                router.push("/projects");
+            },
+          });
+        return (
+          <SidebarMenuItem key={project.id}>
+            <ContextMenu>
+              <ContextMenuTrigger render={<div />}>
+                <ProjectTarget projectId={project.id}>
+                  <div className="nav-entity group relative">
+                    <SidebarMenuButton
+                      render={
+                        <Link
+                          href={workspaceHref({
+                            view: "projects",
+                            selectedId: project.id,
+                          })}
+                          onClick={close}
+                        />
+                      }
+                      isActive={
+                        view === "projects" && selectedId === project.id
+                      }
+                      size="nav"
+                      className="pr-9"
+                    >
+                      <Folder
+                        className="size-4 shrink-0 text-(--entity-color)"
+                        data-color={project.color}
+                      />
+                      <span>{project.name}</span>
+                    </SidebarMenuButton>
+                    <SidebarMenuBadge className="right-9 text-[11px]">
+                      {open.filter((t) => t.projectId === project.id).length ||
+                        ""}
+                    </SidebarMenuBadge>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <SidebarMenuAction
+                            showOnHover
+                            aria-label={`Actions for ${project.name}`}
+                            title={`Actions for ${project.name}`}
+                          />
+                        }
+                      >
+                        <MoreHorizontal />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="quick-actions-dropdown"
+                      >
+                        <DropdownMenuGroup>
+                          <DropdownMenuItem onClick={openEdit}>
+                            <Pencil />
+                            Open/Edit
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={deleteAction}
+                          >
+                            <Trash2 />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </ProjectTarget>
+              </ContextMenuTrigger>
+              <ContextMenuContent className="quick-actions-context-menu">
+                <ContextMenuGroup>
+                  <ContextMenuItem onClick={openEdit}>
+                    <Pencil />
+                    Open/Edit
+                  </ContextMenuItem>
+                </ContextMenuGroup>
+                <ContextMenuSeparator />
+                <ContextMenuGroup>
+                  <ContextMenuItem variant="destructive" onClick={deleteAction}>
+                    <Trash2 />
+                    Delete
+                  </ContextMenuItem>
+                </ContextMenuGroup>
+              </ContextMenuContent>
+            </ContextMenu>
+          </SidebarMenuItem>
+        );
+      })}
     </SidebarMenu>
   );
 

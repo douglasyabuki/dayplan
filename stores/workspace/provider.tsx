@@ -17,6 +17,7 @@ import { type TaskOperation } from "@/lib/tasks/operations";
 import { emptyWorkspace } from "@/lib/workspace/empty";
 import { seedWorkspace } from "@/lib/workspace/seed";
 import { GUEST_DATA_EVENT } from "@/stores/persistence/guest-events";
+import { registerDeparture } from "@/stores/session/departure";
 import {
   AccountWorkspaceDataSource,
   type ImportPreview,
@@ -49,6 +50,7 @@ type Context = {
   storageError: boolean;
   ready: boolean;
   error: string;
+  recoveryStorageError: string;
   notice: { message: string } | null;
   confirmation: Confirmation | null;
   undo: () => void;
@@ -69,6 +71,7 @@ type Context = {
   recoveryCode: string;
   busy: boolean;
   retrySave: () => void;
+  retryRecovery: () => void;
   reloadSaved: () => void;
   downloadBackup: () => void;
   restoreBackup: (snapshot: unknown) => void;
@@ -108,14 +111,25 @@ export function WorkspaceProvider({
   const [operationError, setOperationError] = useState("");
   const persistence = useRef<WorkspacePersistenceSession | null>(null);
   const revision = useRef(0);
-  function commit(next: Workspace) {
-    if (!persistence.current?.active) return;
-    revision.current += 1;
-    current.current = next;
-    dispatch({ type: "replace", state: next });
-  }
+  const skipFailureSnapshot = useRef(false);
+  const commit = useCallback(
+    (next: Workspace, persistEdit = false) => {
+      if (!persistence.current?.active) return;
+      revision.current += 1;
+      current.current = next;
+      dispatch({ type: "replace", state: next });
+      if (persistEdit && dataSource.stage)
+        persistence.current?.saveLatest(next);
+    },
+    [dataSource],
+  );
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const [recoveryStorageError, setRecoveryStorageError] = useState(() =>
+    dataSource instanceof AccountWorkspaceDataSource
+      ? dataSource.recoveryStorageError
+      : "",
+  );
   const [recoveryCode, setRecoveryCode] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -167,7 +181,9 @@ export function WorkspaceProvider({
   function storageFailure(message: string, cause?: unknown) {
     setError(cause instanceof Error ? cause.message : message);
     setRecoveryCode(
-      cause instanceof PersistenceError ? cause.code : "storage_error",
+      cause && typeof cause === "object" && "code" in cause
+        ? String(cause.code)
+        : "storage_error",
     );
   }
   const [notice, setNotice] = useState<{
@@ -178,14 +194,54 @@ export function WorkspaceProvider({
   const [today, setToday] = useState("");
 
   useEffect(() => {
+    let loaded = false;
     const scope = new WorkspacePersistenceSession(dataSource, storageFailure);
     persistence.current = scope;
+    const account =
+      dataSource instanceof AccountWorkspaceDataSource ? dataSource : null;
+    const unsubscribeRecovery = account?.subscribeRecovery(() => {
+      if (scope.active) setRecoveryStorageError(account.recoveryStorageError);
+    });
+    const unregister =
+      account && dataSource.owner.kind === "account"
+        ? registerDeparture(dataSource.owner.userId, {
+            prepare: async (deadline) => {
+              busyRef.current = true;
+              setBusy(true);
+              if (loaded) scope.saveLatest(current.current);
+              try {
+                await scope.flush(deadline - 2000);
+              } catch {
+                /* Coverage decides departure. */
+              }
+              return account.recoveryCovered(
+                new AbortController().signal,
+                deadline,
+              );
+            },
+            resume: () => {
+              if (scope.active) {
+                busyRef.current = false;
+                setBusy(false);
+                scope.resume();
+              }
+            },
+            discard: async () => {
+              busyRef.current = true;
+              setBusy(true);
+              await account.discardRecovery(new AbortController().signal);
+            },
+          })
+        : null;
     scope.load(
       (restored) => {
+        loaded = true;
         commit(restored ?? freshWorkspace());
         setReady(true);
       },
       (cause) => {
+        loaded = true;
+        skipFailureSnapshot.current = true;
         storageFailure(
           cause instanceof Error
             ? cause.message
@@ -201,11 +257,19 @@ export function WorkspaceProvider({
         setReady(true);
       },
     );
-    return () => scope.close();
+    return () => {
+      unregister?.();
+      scope.close();
+      unsubscribeRecovery?.();
+    };
     // The keyed owner boundary fixes the data source for this provider lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataSource]);
   useEffect(() => {
+    if (skipFailureSnapshot.current) {
+      skipFailureSnapshot.current = false;
+      return;
+    }
     if (ready) persistence.current?.saveLatest(state);
   }, [state, ready]);
   useEffect(() => {
@@ -235,7 +299,7 @@ export function WorkspaceProvider({
         children: "Undo",
         onClick: () => {
           if (!persistence.current?.active || editsBlocked()) return;
-          commit(notice.before);
+          commit(notice.before, true);
           setOperationError("");
           setNotice(null);
           toast.close(id);
@@ -249,7 +313,7 @@ export function WorkspaceProvider({
       },
     });
     return () => toast.close(id);
-  }, [notice, editsBlocked]);
+  }, [notice, editsBlocked, commit]);
   function act(action: Action, message?: string) {
     if (!persistence.current?.active || !ready || editsBlocked()) return false;
     try {
@@ -258,7 +322,7 @@ export function WorkspaceProvider({
       setOperationError("");
       if (next === before) return true;
       if (message) setNotice({ message, before });
-      commit(next);
+      commit(next, true);
       return true;
     } catch (cause) {
       setOperationError(
@@ -499,10 +563,14 @@ export function WorkspaceProvider({
         storageError: !!error,
         ready: ready && !!today,
         error,
+        recoveryStorageError,
         persistenceKind: database ? "database" : "browser",
         recoveryCode,
         busy,
         retrySave,
+        retryRecovery: () => {
+          void exclusive((source, signal) => source.load(signal), true);
+        },
         reloadSaved,
         downloadBackup,
         restoreBackup,
@@ -567,7 +635,7 @@ export function WorkspaceProvider({
         confirmation,
         undo: () => {
           if (!notice || !persistence.current?.active || editsBlocked()) return;
-          commit(notice.before);
+          commit(notice.before, true);
           setOperationError("");
           setNotice(null);
         },
