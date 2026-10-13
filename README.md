@@ -1,17 +1,50 @@
 # Dayplan
 
-A UI-only task manager built with Next.js App Router, React, Tailwind CSS 4, shadcn Base UI, and `@dnd-kit/react`.
+A task manager with browser-local guest access and database-backed accounts. Built with Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, shadcn/Base UI, and `@dnd-kit/react`. Google authentication uses Better Auth; account data is stored in PostgreSQL through Prisma ORM 7 and its PostgreSQL driver adapter.
 
 ## Start
 
+Use Node.js 22.12+ and npm, with a PostgreSQL database available for authentication and account persistence.
+
+1. Install dependencies with `npm ci`.
+2. Copy [.env.example](.env.example) to `.env.development.local` and fill in the values below. Preserve any existing database connection settings.
+
+| Variable               | Purpose                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `DATABASE_URL`         | PostgreSQL connection string used by Prisma and the server.    |
+| `BETTER_AUTH_URL`      | App origin; use `http://localhost:3000` for local development. |
+| `BETTER_AUTH_SECRET`   | Random authentication secret of at least 32 characters.        |
+| `GOOGLE_CLIENT_ID`     | Google Web application OAuth client ID.                        |
+| `GOOGLE_CLIENT_SECRET` | Matching Google OAuth client secret.                           |
+
+3. Generate the Prisma client and apply the checked-in migrations to your development database:
+
+   ```sh
+   npx prisma generate
+   npx prisma migrate deploy
+   npm run db:check
+   npm run dev
+   ```
+
+Next.js and `prisma.config.ts` load `.env.development.local` during development. Keep real credentials in ignored environment files or deployment environment variables.
+
+For Google sign-in, register `http://localhost:3000/api/auth/callback/google` as an authorized redirect URI in the Google OAuth client. For a deployment, use its app origin in both `BETTER_AUTH_URL` and the callback URI. Google credentials are optional for guest use; account sign-in reports that it is unavailable when they are missing.
+
+Open `http://localhost:3000`. The root redirects to Today; first-time guests are sent to `/welcome` to choose how to continue. Returning guests and signed-in users use the same workspace routes. `/sign-in` and `/sign-up` both use Google. On Windows PowerShell, use `npm.cmd` or `npx.cmd` if script execution policy blocks their PowerShell wrappers.
+
+New guest workspaces start with sample tasks dated relative to their creation and are saved under `dayplan.workspace.v2` in browser local storage. New account workspaces start empty. Settings provides sample-data reset, clear-data, and JSON backup/restore actions for the current workspace.
+
+## Production
+
+Configure the same server environment variables for production, then run:
+
 ```sh
-npm install
-npm run dev
+npx prisma migrate deploy
+npm run build
+npm start
 ```
 
-Open `http://localhost:3000`. The root opens Today. On Windows PowerShell, use `npm.cmd` if script execution policy blocks `npm`.
-
-The workspace starts with sample tasks dated relative to the first launch in a browser. Changes are stored in that browser under `dayplan.workspace.v2`. The app does not import data from older storage keys. Use the account/settings button to reset the workspace to fresh sample data.
+`npm run build` generates the Prisma client before building Next.js; it does not apply migrations. `npm run vercel-build` generates the client, applies migrations, and builds the app. Account API routes use the Node.js runtime and require access to PostgreSQL.
 
 ## Included
 
@@ -22,6 +55,8 @@ The workspace starts with sample tasks dated relative to the first launch in a b
 - Section creation, renaming, reordering, and deletion with a choice to delete tasks or move them to another section. Unsectioned always remains available.
 - Day/week/month calendars, an unscheduled tray, timed blocks, overlap layout, and drag rescheduling.
 - Responsive navigation and task sheets, light/dark/system themes, undo feedback, and local-storage recovery notices.
+- Welcome/onboarding, Google sign-in and account switching, editable profile names, and separate guest/account workspaces.
+- Explicit guest-to-account import, JSON backup/restore, sample-data reset, clear-data, and account save/recovery feedback.
 
 Press **N** to add a task or **Ctrl/Cmd K** to search. Drag using task handles; scheduling and project assignment are also available in the editor. Calendar time slots snap to 15 minutes and new blocks default to 30 minutes. Double-click a time slot to create a task there.
 
@@ -29,11 +64,25 @@ In Inbox or a project, use **List / Kanban** to switch layouts and **Add section
 
 Deleting a section applies to all its tasks, including completed, archived, and filtered-out tasks. Deleting a member recurring series also deletes its occurrences; a moved-in occurrence from a different series is deleted individually. The move option preserves tasks and recurring series. The notification offers Undo.
 
-## Data boundaries
+## Persistence and accounts
+
+Guests use browser local storage; signed-in users load and save a user-owned workspace snapshot in PostgreSQL. Signing in does not automatically transfer guest data. An import preview and confirmation let you add the guest workspace to the account, or discard the guest copy. Successful import removes the imported guest workspace and guest profile name from the browser while preserving newer guest changes. Retrying the same imported snapshot does not add duplicates; importing a changed snapshot can add separate copies and requires confirmation.
+
+Account edits appear immediately in memory and are staged in a per-user, per-tab IndexedDB recovery journal. Network saves normally wait for 10 seconds of inactivity, with a maximum delay of 60 seconds. Web Locks coordinate account operations across tabs. Revision checks detect saves from another tab or device instead of silently overwriting them; save operation IDs make retries safe. This is snapshot persistence with conflict recovery, rather than live collaborative editing.
+
+Settings > Data offers retry, server reload, and backup actions when storage needs attention. Restoring a valid JSON backup replaces the entire workspace, including theme and timezone, after confirmation. Resetting to sample data and clearing data preserve the profile, theme, and timezone. Sign-out and account switching resolve pending saves or recovery first; unresolved edits can require explicit discard before leaving. Guest data and account recovery remain isolated by ownership.
+
+Guest workspaces are validated when loaded. Missing data seeds a fresh sample workspace; invalid stored data triggers recovery feedback and is not overwritten automatically. Older workspace storage keys are ignored and are not migrated. Account loads and restored backups are also validated.
+
+Google is the implemented sign-in provider. Password changes and account deletion are currently disabled in Settings.
+
+## Code organization and domain rules
 
 Shared domain contracts and values live in `types-and-constants/`. Pure rules live under `lib/`: tasks own hierarchy, recurrence, completion, editing, and occurrence exceptions; tags own their tree; projects and sections own their collection rules. `lib/calendar/layout.ts` positions task occurrences, `lib/workspace/` owns routes, view selection, grouping, layout keys, and sample data, and `lib/dates.ts` supplies general date operations. `lib/utils.ts` retains the shadcn `cn()` alias.
 
-`stores/workspace/provider.tsx` owns one workspace state and the coordinated commit path, including hydration, persistence, Undo, confirmations, and errors. The reducer dispatches domain mutations; `commands.ts` constructs editor and drag transactions, while `transitions.ts` combines domain rules for atomic tag/project deletion and section moves. Persisted-state validation and browser storage are separate modules. The version 2 schema and storage key remain unchanged. Domain logic does not import the store or React.
+`stores/workspace/provider.tsx` owns one workspace state and the coordinated commit path, including hydration, persistence, Undo, confirmations, and errors. The reducer dispatches domain mutations; `commands.ts` constructs editor and drag transactions, while `transitions.ts` combines domain rules for atomic tag/project deletion and section moves. Data-source adapters separate guest storage from account API access; persistence sessions, coordination, and recovery journals handle asynchronous saves and owner changes. The version 2 workspace schema and guest storage key remain unchanged. Domain logic does not import the store or React.
+
+`stores/session/`, `stores/account/`, and `stores/onboarding/` own session transitions, profiles, and guest entry state. `lib/auth.ts`, `lib/server-session.ts`, and `lib/prisma.ts` provide server authentication, session verification, and the shared database client. `lib/workspace/server.ts` handles account snapshot saves and imports; `prisma/` contains the schema and migrations. Generated Prisma code lives in ignored `lib/generated/prisma/`.
 
 `contexts/workspace-controller.tsx` remains the composition facade, using focused navigation and tag-expansion hooks under `hooks/`. Components are grouped under tasks (including editor and controls), tags, projects, sections, and calendar. The calendar context stays private to calendar UI; the shared name/color dialog serves both projects and tags. `components/ui/` remains reserved for shadcn primitives. `components/workspace/` composes the application, including shell, overlays, loading, Undo, confirmation, and storage feedback. Routes, layouts, and styling remain under `app/`, and tests remain under `tests/`.
 
@@ -41,10 +90,23 @@ Dates without a time remain calendar dates. Timed values represent local wall-cl
 
 Recurring occurrences have stable `seriesId@date` identities. Individual edits and completion persist as exceptions; ordinary future occurrences are generated for the requested range. Editing a series preserves exceptions and completed history. Archive applies to the series independently of completion.
 
-There is no authentication, remote synchronization, database client, or API layer. The standalone `temp/my-prisma-postgres-app` example is excluded from the root app's TypeScript and lint scopes. Workspace data stays in browser local storage.
-
-Saved workspaces are validated when loaded. Missing data seeds a fresh sample workspace. Invalid stored data triggers the storage recovery UI and is not overwritten automatically. Older storage keys are ignored, so they are left untouched and are not migrated.
+`app/api/` exposes authentication, auth availability, profile, workspace, and guest-import endpoints. Workspace routes support public guest access; account reads and writes verify the server session and derive ownership from it. Account mutations also validate the request origin. The standalone `temp/my-prisma-postgres-app` example is excluded from the root app's TypeScript and lint scopes.
 
 ## Validation
 
-Run `npm test` for the domain and interaction logic tests, including storage validation and section, route, editor, presentation, and drag behavior. Other available checks are `npm run lint`, `npx tsc --noEmit`, and `npm run build`. Interactive checks should cover pointer and keyboard dragging, mobile navigation, long names, horizontal board scrolling, and theme changes.
+| Command                | Checks                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------------------------- |
+| `npm test`             | Unit, browser, and end-to-end suites in sequence.                                                         |
+| `npm run test:unit`    | Domain rules, storage validation, account persistence, OAuth, import, and interaction logic.              |
+| `npm run test:browser` | React interactions, onboarding, profiles, owner changes, recovery, and backup/restore in headless Chrome. |
+| `npm run test:e2e`     | Playwright user flows against a production build on `http://localhost:3100`.                              |
+| `npm run test:account` | Focused account persistence, account data-source, and guest-import unit tests.                            |
+| `npm run test:watch`   | Vitest watch mode.                                                                                        |
+| `npm run db:check`     | PostgreSQL connectivity through the Prisma client.                                                        |
+| `npm run lint`         | ESLint.                                                                                                   |
+| `npx tsc --noEmit`     | TypeScript checks; generate the Prisma client first.                                                      |
+| `npm run build`        | Prisma client generation and production build.                                                            |
+
+The browser and end-to-end configurations use installed Google Chrome (`channel: "chrome"`). Playwright builds and starts its own server on port 3100 and does not reuse an existing server. Database/OAuth unit tests use isolated PGlite databases and a mocked Google token/profile exchange. Generate the Prisma client before running those tests.
+
+Interactive checks should cover pointer and keyboard dragging, mobile navigation, long names, horizontal board scrolling, theme changes, Google sign-in/sign-out, guest import, and storage/conflict recovery.
