@@ -1,6 +1,7 @@
 import { isPromise, serialized } from "@/stores/persistence/queue";
 import type { Workspace } from "@/types-and-constants/workspace";
 
+import { bounded } from "./coordination";
 import type { WorkspaceDataSource } from "./data-source";
 
 /** One provider lifetime. All completions and queued work are cancellation guarded. */
@@ -8,7 +9,15 @@ export class WorkspacePersistenceSession {
   private controller = new AbortController();
   private pending: Workspace | null = null;
   private saving = false;
+  private firstEditAt: number | null = null;
+  private lastEditAt = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private inFlight: Promise<unknown> = Promise.resolve();
+  private staging: Promise<void> = Promise.resolve();
+  private flushing = false;
   private resetting = false;
+  private failure: unknown = null;
+  private loadedSuccessfully = false;
   private failedReset: { snapshot: Workspace; onSaved: () => void } | null =
     null;
   writable = false;
@@ -23,6 +32,7 @@ export class WorkspacePersistenceSession {
   }
 
   close() {
+    this.cancelTimer();
     this.controller.abort();
     this.pending = null;
     this.writable = false;
@@ -35,22 +45,125 @@ export class WorkspacePersistenceSession {
     this.perform(
       () => this.source.load(this.controller.signal),
       (snapshot) => {
+        this.loadedSuccessfully = true;
+        this.failure = null;
         this.writable = true;
         onLoad(snapshot);
       },
-      onFailure,
+      (cause) => {
+        this.failure = cause;
+        this.loadedSuccessfully = false;
+        onFailure(cause);
+      },
     );
   }
 
   saveLatest(snapshot: Workspace) {
-    if (!this.active || !this.writable) return;
+    if (!this.active) return;
+    if (this.source.isSaved?.(snapshot) && !this.source.immediateSaving) return;
+    // Journal edits even while a network/conflict error has paused sending.
+    if (this.source.stage) {
+      const staged = this.source.stage(snapshot, this.controller.signal);
+      this.staging = staged;
+      void staged.then(
+        () => this.schedule(),
+        (cause) => {
+          if (this.active) {
+            this.writable = false;
+            this.onError("Saving needs coordination. Retry safely.", cause);
+          }
+        },
+      );
+    }
+    if (this.pending === snapshot) return;
     this.pending = snapshot;
-    this.drain();
+    if (this.firstEditAt === null) this.firstEditAt = Date.now();
+    this.lastEditAt = Date.now();
+    this.schedule();
+  }
+
+  private cancelTimer() {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  private dueAt() {
+    return this.source.owner.kind === "guest" || this.source.immediateSaving
+      ? 0
+      : Math.min(
+          this.lastEditAt + 10000,
+          (this.firstEditAt ?? Date.now()) + 60000,
+        );
+  }
+
+  private schedule() {
+    this.cancelTimer();
+    if (
+      !this.active ||
+      !this.writable ||
+      !this.pending ||
+      this.saving ||
+      this.resetting ||
+      this.flushing
+    )
+      return;
+    const remaining = this.dueAt() - Date.now();
+    if (remaining <= 0) this.drain();
+    else
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.drain();
+      }, remaining);
+  }
+
+  /** Flush only under the caller's deadline; canceled queued work cannot send later. */
+  async flush(deadline: number): Promise<void> {
+    this.cancelTimer();
+    this.flushing = true;
+    try {
+      await bounded(this.controller.signal, deadline, async (signal) => {
+        await this.staging;
+        signal.throwIfAborted();
+        if (!this.loadedSuccessfully)
+          throw this.failure ?? new Error("Account recovery has not loaded.");
+        try {
+          await this.inFlight;
+        } catch {
+          /* Reconcile ambiguous saves below. */
+        }
+        const code = (this.failure as { code?: string } | null)?.code;
+        if (code === "revision_conflict" || code === "operation_mismatch")
+          throw this.failure;
+        signal.throwIfAborted();
+        if (this.failedReset) throw new Error("Reset is not confirmed.");
+        if (this.pending) {
+          const snapshot = this.pending;
+          await serialized(this.source, signal, () =>
+            this.source.save(snapshot, signal),
+          );
+          signal.throwIfAborted();
+          if (this.pending === snapshot) {
+            this.pending = null;
+            this.firstEditAt = null;
+          }
+        }
+      });
+    } catch (cause) {
+      this.failure = cause;
+      this.writable = false;
+      if (this.active)
+        this.onError("Saving could not be confirmed. Retry safely.", cause);
+      throw cause;
+    } finally {
+      this.flushing = false;
+    }
   }
 
   reset(snapshot: Workspace, onSaved: () => void) {
     if (!this.active || this.resetting) return;
     this.resetting = true;
+    this.cancelTimer();
+    this.firstEditAt = null;
     this.pending = null;
     this.perform(
       () => this.source.save(snapshot, this.controller.signal),
@@ -58,9 +171,10 @@ export class WorkspacePersistenceSession {
         this.resetting = false;
         this.failedReset = null;
         this.pending = null;
+        this.failure = null;
         this.writable = true;
         onSaved();
-        this.drain();
+        this.schedule();
       },
       (cause) => {
         this.resetting = false;
@@ -89,17 +203,22 @@ export class WorkspacePersistenceSession {
       return;
     }
     this.saving = true;
+    this.cancelTimer();
+    this.firstEditAt = null;
+    this.pending = null;
     this.perform(
       () => this.source.save(snapshot, this.controller.signal),
       () => {
         this.saving = false;
+        this.failure = null;
         this.writable = true;
         onSaved();
-        this.drain();
+        this.schedule();
       },
       (cause) => {
         this.saving = false;
         this.writable = false;
+        this.failure = cause;
         this.onError(
           "The save could not be confirmed. Your local edits have been kept.",
           cause,
@@ -115,12 +234,16 @@ export class WorkspacePersistenceSession {
     if (!this.active || (!this.writable && !allowPaused))
       throw new Error("Resolve the storage error before importing.");
     this.writable = false;
+    this.cancelTimer();
+    this.firstEditAt = null;
     this.pending = null;
     const result = await serialized(this.source, this.controller.signal, () =>
       operation(this.controller.signal),
     );
     this.controller.signal.throwIfAborted();
     this.failedReset = null;
+    this.failure = null;
+    this.loadedSuccessfully = true;
     this.writable = true;
     return result;
   }
@@ -134,9 +257,9 @@ export class WorkspacePersistenceSession {
   }
 
   resume() {
-    if (!this.active) return;
+    if (!this.active || this.failure) return;
     this.writable = true;
-    this.drain();
+    this.schedule();
   }
 
   private drain() {
@@ -145,22 +268,25 @@ export class WorkspacePersistenceSession {
       !this.writable ||
       this.saving ||
       this.resetting ||
+      this.flushing ||
       !this.pending
     )
       return;
     const snapshot = this.pending;
     this.pending = null;
+    this.firstEditAt = null;
+    this.cancelTimer();
     this.saving = true;
     this.perform(
       () => this.source.save(snapshot, this.controller.signal),
       () => {
         this.saving = false;
-        this.drain();
+        this.schedule();
       },
       (cause) => {
         this.saving = false;
         this.writable = false;
-        this.pending = null;
+        this.failure = cause;
         if (this.source.owner.kind === "guest")
           this.onError(
             "Your browser could not save changes. Your current work is still available in this session.",
@@ -187,8 +313,10 @@ export class WorkspacePersistenceSession {
     };
     try {
       const result = serialized(this.source, this.controller.signal, operation);
-      if (isPromise(result)) void result.then(resolve, reject);
-      else resolve(result);
+      if (isPromise(result)) {
+        this.inFlight = result;
+        void result.then(resolve, reject);
+      } else resolve(result);
     } catch (cause) {
       reject(cause);
     }

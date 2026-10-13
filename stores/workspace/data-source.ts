@@ -12,4 +12,7 @@ export interface WorkspaceDataSource {
   readonly owner: WorkspaceOwner;
   load(signal: AbortSignal): Workspace | null | Promise<Workspace | null>;
   save(snapshot: Workspace, signal: AbortSignal): void | Promise<void>;
+  stage?(snapshot: Workspace, signal: AbortSignal): Promise<void>;
+  readonly immediateSaving?: boolean;
+  isSaved?(snapshot: Workspace): boolean;
 }

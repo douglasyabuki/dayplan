@@ -14,12 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useSessionActions } from "@/stores/session/provider";
 import { useWorkspace } from "@/stores/workspace/provider";
 
 export function WorkspaceFeedback() {
   const cancelButton = useRef<HTMLButtonElement>(null);
+  const sessionActions = useSessionActions();
   const {
     error,
+    confirm,
+    recoveryStorageError,
     operationError,
     dismissOperationError,
     confirmation,
@@ -32,6 +36,7 @@ export function WorkspaceFeedback() {
     downloadBackup,
     reloadSaved,
     retrySave,
+    retryRecovery,
     busy,
     hasPendingImport,
     retryImport,
@@ -43,6 +48,55 @@ export function WorkspaceFeedback() {
   return (
     <>
       <GuestImportPanel />
+      {sessionActions?.departureBlocked && (
+        <Alert variant="destructive">
+          <AlertTitle>Your edits need attention before leaving</AlertTitle>
+          <AlertDescription>{sessionActions.error}</AlertDescription>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={downloadBackup}>
+              Download local backup
+            </Button>
+            <Button
+              variant="outline"
+              disabled={sessionActions.busy}
+              onClick={() => void sessionActions.retryDeparture()}
+            >
+              Retry leaving
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={sessionActions.busy}
+              onClick={() =>
+                confirm({
+                  title: "Discard unconfirmed edits and leave?",
+                  description:
+                    "Download a backup first if you want to keep your edits. This discards this tab's pending changes.",
+                  confirmLabel: "Discard edits and leave",
+                  action: () => {
+                    void sessionActions.discardAndLeave();
+                  },
+                })
+              }
+            >
+              Discard edits and leave
+            </Button>
+          </div>
+        </Alert>
+      )}
+      {recoveryStorageError && (
+        <Alert variant="destructive">
+          <AlertTitle>Browser recovery needs attention</AlertTitle>
+          <AlertDescription>{recoveryStorageError}</AlertDescription>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={downloadBackup}>
+              Download local backup
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={retrySave}>
+              Retry save and recovery
+            </Button>
+          </div>
+        </Alert>
+      )}
       {guestCleanupError && (
         <Alert variant="destructive">
           <AlertTitle>Guest data cleanup needs attention</AlertTitle>
@@ -99,6 +153,14 @@ export function WorkspaceFeedback() {
                   onClick={() => void retryImport()}
                 >
                   Retry import
+                </Button>
+              ) : recoveryCode === "load_failed" ? (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={retryRecovery}
+                >
+                  Retry recovery
                 </Button>
               ) : (
                 recoveryCode !== "revision_conflict" &&

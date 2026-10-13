@@ -7,6 +7,12 @@ import { validateWorkspace } from "@/stores/workspace/validation";
 import type { Workspace } from "@/types-and-constants/workspace";
 
 import {
+  accountCoordinated,
+  bounded,
+  CoordinationError,
+  journalCoordinated,
+} from "./coordination";
+import {
   cleanupGuestData,
   type GuestCleanupJournal,
   guestCleanupKey,
@@ -17,6 +23,15 @@ import {
   sameGuestWorkspace,
   writeGuestCleanup,
 } from "./guest-data";
+import {
+  listRecovery,
+  readRecovery,
+  type RecoveryRecord,
+  RecoveryStorageError,
+  RecoveryValidationError,
+  type SaveOperation,
+  writeRecovery,
+} from "./recovery-journal";
 
 export class PersistenceError extends Error {
   constructor(
@@ -32,11 +47,6 @@ export type ImportPreview = {
   hasPriorImports: boolean;
   alreadyImported: boolean;
 };
-type SaveOperation = {
-  operationId: string;
-  snapshot: Workspace;
-  expectedRevision: number;
-};
 type ImportOperation = {
   snapshot: Workspace;
   expectedRevision: number;
@@ -50,6 +60,17 @@ class AccountConnection {
   ) {}
 
   async request<T>(
+    path: string,
+    signal: AbortSignal,
+    body?: unknown,
+    method = "POST",
+  ): Promise<T> {
+    return bounded(signal, Date.now() + 10000, (inner) =>
+      this.send<T>(path, inner, body, method),
+    );
+  }
+
+  private async send<T>(
     path: string,
     signal: AbortSignal,
     body?: unknown,
@@ -87,6 +108,7 @@ class AccountConnection {
       );
     }
     if (!response.ok) {
+      signal.throwIfAborted();
       if (
         result.code === "unauthorized" ||
         result.code === "session_mismatch"
@@ -110,11 +132,37 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   private revision = 0;
   private saved = "";
   private pendingSave: SaveOperation | null = null;
+  private writerId = crypto.randomUUID();
+  private generation = 0;
+  private operationGeneration = 0;
+  private latest: Workspace | null = null;
+  private sequence = 0;
+  private durableRecord: RecoveryRecord | null = null;
+  private journalQueue: Promise<void> = Promise.resolve();
+  private stagingQueue: Promise<void> = Promise.resolve();
+  recoveryStorageError = "";
+  private recoveryListeners = new Set<() => void>();
+
+  subscribeRecovery(listener: () => void): () => void {
+    this.recoveryListeners.add(listener);
+    return () => {
+      this.recoveryListeners.delete(listener);
+    };
+  }
+
+  private notifyRecovery() {
+    for (const listener of this.recoveryListeners) listener();
+  }
   private pendingImport: ImportOperation | null = null;
   private cleanupJournal: GuestCleanupJournal | null = null;
   guestCleanupError = "";
 
-  constructor(private connection: AccountConnection) {
+  constructor(
+    private connection: Pick<
+      AccountConnection,
+      "owner" | "request" | "sessionId"
+    >,
+  ) {
     this.owner = connection.owner;
   }
 
@@ -247,23 +295,193 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   }
 
   get recoverySnapshot(): Workspace | null {
-    return this.pendingSave
-      ? structuredClone(this.pendingSave.snapshot)
-      : this.saved
-        ? validateWorkspace(JSON.parse(this.saved))
-        : null;
+    return this.latest
+      ? structuredClone(this.latest)
+      : this.pendingSave
+        ? structuredClone(this.pendingSave.snapshot)
+        : this.saved
+          ? validateWorkspace(JSON.parse(this.saved))
+          : null;
+  }
+
+  get immediateSaving() {
+    return !!this.recoveryStorageError;
+  }
+
+  isSaved(snapshot: Workspace): boolean {
+    return (
+      !this.latest &&
+      !this.pendingSave &&
+      JSON.stringify(snapshot) === this.saved
+    );
+  }
+
+  async discardRecovery(signal: AbortSignal): Promise<void> {
+    await bounded(signal, Date.now() + 4000, (inner) =>
+      accountCoordinated(this.accountId, inner, Date.now() + 4000, async () => {
+        const before = { latest: this.latest, pending: this.pendingSave };
+        this.latest = null;
+        this.pendingSave = null;
+        try {
+          await this.persist(inner);
+        } catch (error) {
+          this.latest = before.latest;
+          this.pendingSave = before.pending;
+          throw error;
+        }
+        if (
+          this.recoveryStorageError &&
+          (this.durableRecord?.latest || this.durableRecord?.operation)
+        ) {
+          this.latest = before.latest;
+          this.pendingSave = before.pending;
+          throw new RecoveryStorageError();
+        }
+      }),
+    );
+  }
+
+  private record(): RecoveryRecord {
+    return {
+      version: 1,
+      userId: this.accountId,
+      writerId: this.writerId,
+      sequence: this.sequence + 1,
+      generation: this.generation,
+      baseRevision: this.revision,
+      latest: this.latest ? structuredClone(this.latest) : null,
+      operation: this.pendingSave
+        ? {
+            ...structuredClone(this.pendingSave),
+            generation: this.operationGeneration,
+          }
+        : null,
+    };
+  }
+
+  private storageFailure() {
+    this.recoveryStorageError = new RecoveryStorageError().message;
+    this.notifyRecovery();
+  }
+
+  private persist(signal: AbortSignal): Promise<void> {
+    const update = this.journalQueue.then(() => {
+      signal.throwIfAborted();
+      return journalCoordinated(
+        this.accountId,
+        this.writerId,
+        signal,
+        Date.now() + 2000,
+        () => this.persistNow(signal),
+      );
+    });
+    this.journalQueue = update.catch(() => {});
+    return update;
+  }
+
+  private async persistNow(signal: AbortSignal) {
+    const record = this.record();
+    try {
+      await bounded(signal, Date.now() + 1500, (inner) =>
+        writeRecovery(record, this.sequence, inner, () => {
+          this.sequence = record.sequence;
+          this.durableRecord = record;
+        }),
+      );
+      this.sequence = record.sequence;
+      this.recoveryStorageError = "";
+      this.notifyRecovery();
+    } catch (error) {
+      if (signal.aborted) throw error;
+      if (error instanceof CoordinationError) throw error;
+      this.storageFailure();
+    }
+  }
+
+  /** Stage edits immediately, independently of the network debounce. */
+  stage(snapshot: Workspace, signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    const unchanged =
+      JSON.stringify(snapshot) === JSON.stringify(this.latest) ||
+      (!this.latest && JSON.stringify(snapshot) === this.saved);
+    if (unchanged && !this.recoveryStorageError) return this.stagingQueue;
+    if (!unchanged) {
+      this.latest = structuredClone(snapshot);
+      this.generation += 1;
+    }
+    // Cleanup cancels requests, not an accepted edit's durable write.
+    const stageSignal = new AbortController().signal;
+    const run = () =>
+      bounded(stageSignal, Date.now() + 4000, (inner) => this.persist(inner));
+    const staged = this.stagingQueue.then(run);
+    this.stagingQueue = staged.catch(() => {});
+    return staged;
+  }
+
+  /** Verify actual contents, including newer edits and the immutable unresolved payload. */
+  async recoveryCovered(
+    signal: AbortSignal,
+    deadline: number,
+  ): Promise<boolean> {
+    if (this.pendingImport) {
+      try {
+        const journal = readGuestCleanup(this.accountId);
+        if (
+          JSON.stringify(journal?.operation) !==
+          JSON.stringify(this.pendingImport)
+        )
+          return false;
+      } catch {
+        return false;
+      }
+    }
+    if (!this.latest && !this.pendingSave) return true;
+    try {
+      return await bounded(signal, deadline, async (inner) => {
+        // A read-only atomic observation does not bypass lock ownership.
+        // It remains available when another tab holds the account network lock.
+        const stored = await readRecovery(this.accountId, this.writerId, inner);
+        const expected = this.record();
+        return (
+          !!stored &&
+          stored.generation === this.generation &&
+          stored.baseRevision === this.revision &&
+          JSON.stringify(stored.latest) === JSON.stringify(expected.latest) &&
+          JSON.stringify(stored.operation) ===
+            JSON.stringify(expected.operation)
+        );
+      });
+    } catch {
+      return false;
+    }
   }
 
   private async finishSave(signal: AbortSignal): Promise<void> {
     if (!this.pendingSave) return;
     const operation = this.pendingSave;
+    const operationGeneration = this.operationGeneration;
     const result = await this.connection.request<{
       committedRevision: number;
       currentRevision: number;
     }>("/api/workspace", signal, operation, "PUT");
+    signal.throwIfAborted();
+    if (
+      !result ||
+      typeof result !== "object" ||
+      !Number.isSafeInteger(result.committedRevision) ||
+      result.committedRevision !== operation.expectedRevision + 1 ||
+      !Number.isSafeInteger(result.currentRevision) ||
+      result.currentRevision < result.committedRevision
+    )
+      throw new PersistenceError(
+        "network_error",
+        "The save response could not be verified. Retry safely.",
+      );
     this.pendingSave = null;
     this.revision = result.committedRevision;
     this.saved = JSON.stringify(operation.snapshot);
+    if (this.generation === operationGeneration) this.latest = null;
+    await this.persist(signal);
     if (result.currentRevision !== result.committedRevision)
       throw new PersistenceError(
         "revision_conflict",
@@ -272,35 +490,158 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   }
 
   async load(signal: AbortSignal): Promise<Workspace | null> {
+    return bounded(signal, Date.now() + 10000, async (inner) => {
+      await this.stagingQueue;
+      inner.throwIfAborted();
+      return this.loadRecovery(inner);
+    });
+  }
+
+  private async loadRecovery(signal: AbortSignal): Promise<Workspace | null> {
+    let records: RecoveryRecord[] = [];
+    try {
+      records = await listRecovery(this.accountId, signal);
+    } catch (error) {
+      if (signal.aborted || error instanceof RecoveryValidationError)
+        throw error;
+      this.storageFailure();
+    }
+    if (this.pendingSave || this.latest) {
+      let own: RecoveryRecord | null = null;
+      try {
+        own = await readRecovery(this.accountId, this.writerId, signal);
+      } catch (error) {
+        if (signal.aborted || error instanceof RecoveryValidationError)
+          throw error;
+        this.storageFailure();
+      }
+      if (own)
+        records = [
+          own,
+          ...records.filter((record) => record.writerId !== own.writerId),
+        ];
+      else
+        await accountCoordinated(
+          this.accountId,
+          signal,
+          Date.now() + 10000,
+          () => this.saveLocked(signal),
+        );
+    }
+    for (const candidate of records) {
+      await accountCoordinated(
+        this.accountId,
+        signal,
+        Date.now() + 10000,
+        async () => {
+          const record = await readRecovery(
+            this.accountId,
+            candidate.writerId,
+            signal,
+          );
+          if (!record) return;
+          const sameWriter = this.writerId === record.writerId;
+          if (
+            !record.latest &&
+            !record.operation &&
+            !(sameWriter && (this.latest || this.pendingSave))
+          )
+            return;
+          const memoryLatest = sameWriter ? this.latest : null;
+          const memoryRevision = this.revision;
+          const memoryGeneration = sameWriter ? this.generation : 0;
+          const memoryOperation = sameWriter ? this.pendingSave : null;
+          const memoryOperationGeneration = this.operationGeneration;
+          if (
+            sameWriter &&
+            memoryLatest &&
+            memoryGeneration < record.generation
+          )
+            throw new CoordinationError();
+          if (
+            memoryOperation &&
+            record.operation &&
+            memoryOperation.operationId !== record.operation.operationId
+          )
+            throw new CoordinationError();
+          this.writerId = record.writerId;
+          this.sequence = record.sequence;
+          this.durableRecord = record;
+          this.generation = record.generation;
+          this.revision = record.baseRevision;
+          this.latest = record.latest;
+          this.operationGeneration = record.operation?.generation ?? 0;
+          this.pendingSave = record.operation
+            ? {
+                operationId: record.operation.operationId,
+                snapshot: record.operation.snapshot,
+                expectedRevision: record.operation.expectedRevision,
+              }
+            : null;
+          if (memoryGeneration >= record.generation && memoryLatest) {
+            this.latest = memoryLatest;
+            this.generation = memoryGeneration;
+            this.revision = memoryRevision;
+          }
+          if (memoryOperation && !this.pendingSave) {
+            this.pendingSave = memoryOperation;
+            this.operationGeneration = memoryOperationGeneration;
+          }
+          await this.saveLocked(signal);
+        },
+      );
+    }
+    if (records.length) {
+      // Recovered writers keep tombstones; new edits belong to this new writer.
+      this.writerId = crypto.randomUUID();
+      this.sequence = 0;
+      this.durableRecord = null;
+      this.generation = 0;
+    }
     // Reconcile an ambiguous operation before a returning owner's initial load.
     if (this.pendingImport) return this.retryImport(signal);
-    if (this.pendingSave) {
-      try {
-        await this.finishSave(signal);
-      } catch (error) {
-        if (
-          !(error instanceof PersistenceError) ||
-          error.code !== "revision_conflict"
-        )
-          throw error;
-        this.pendingSave = null;
-      }
-    }
     const snapshot = await this.reload(signal);
     const recovered = await this.recoverGuestCleanup(signal);
     return recovered ?? snapshot;
   }
 
   async reload(signal: AbortSignal): Promise<Workspace | null> {
+    if (this.pendingSave) {
+      try {
+        await bounded(signal, Date.now() + 10000, (inner) =>
+          accountCoordinated(this.accountId, inner, Date.now() + 10000, () =>
+            this.finishSave(inner),
+          ),
+        );
+      } catch (error) {
+        if (
+          !(error instanceof PersistenceError) ||
+          !["revision_conflict", "operation_mismatch"].includes(error.code)
+        )
+          throw error;
+      }
+    }
     const result = await this.connection.request<{
       snapshot: Workspace | null;
       revision: number;
     }>("/api/workspace", signal);
+    signal.throwIfAborted();
+    if (!Number.isSafeInteger(result.revision) || result.revision < 0)
+      throw new PersistenceError(
+        "network_error",
+        "The workspace revision could not be verified.",
+      );
     const snapshot =
       result.snapshot === null ? null : validateWorkspace(result.snapshot);
     this.pendingSave = null;
     this.revision = result.revision;
     this.saved = snapshot ? JSON.stringify(snapshot) : "";
+    this.latest = null;
+    await bounded(signal, Date.now() + 4000, (inner) =>
+      accountCoordinated(this.accountId, inner, Date.now() + 4000, () =>
+        this.persist(inner),
+      ),
+    );
     return snapshot;
   }
 
@@ -310,13 +651,29 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
         "import_pending",
         "Resolve the pending import before saving.",
       );
+    await this.stage(snapshot, signal);
+    await this.stagingQueue;
+    await bounded(signal, Date.now() + 10000, (inner) =>
+      accountCoordinated(this.accountId, inner, Date.now() + 10000, () =>
+        this.saveLocked(inner),
+      ),
+    );
+  }
+
+  private async saveLocked(signal: AbortSignal): Promise<void> {
     await this.finishSave(signal);
-    if (JSON.stringify(snapshot) === this.saved) return;
+    const snapshot = this.latest;
+    if (!snapshot || JSON.stringify(snapshot) === this.saved) {
+      this.latest = null;
+      return;
+    }
     this.pendingSave = {
       operationId: crypto.randomUUID(),
       snapshot: structuredClone(snapshot),
       expectedRevision: this.revision,
     };
+    this.operationGeneration = this.generation;
+    await this.persist(signal);
     await this.finishSave(signal);
   }
 
@@ -335,7 +692,12 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
     signal: AbortSignal,
     target: GuestData = readGuestData(),
   ): Promise<Workspace> {
-    if (this.pendingSave) await this.finishSave(signal);
+    if (this.pendingSave)
+      await bounded(signal, Date.now() + 10000, (inner) =>
+        accountCoordinated(this.accountId, inner, Date.now() + 10000, () =>
+          this.finishSave(inner),
+        ),
+      );
     if (!this.pendingImport) {
       if (this.cleanupJournal?.confirmed) {
         throw new PersistenceError(
@@ -385,6 +747,14 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   }
 
   async retryImport(signal: AbortSignal): Promise<Workspace> {
+    return bounded(signal, Date.now() + 10000, (inner) =>
+      accountCoordinated(this.accountId, inner, Date.now() + 10000, () =>
+        this.retryImportLocked(inner),
+      ),
+    );
+  }
+
+  private async retryImportLocked(signal: AbortSignal): Promise<Workspace> {
     if (!this.pendingImport)
       throw new PersistenceError(
         "invalid_input",
@@ -431,6 +801,8 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
     const imported = this.pendingImport.snapshot;
     this.revision = result.revision;
     this.saved = JSON.stringify(snapshot);
+    this.latest = null;
+    await this.persist(signal);
     this.pendingImport = null;
     this.finishGuestCleanup(
       this.cleanupJournal ?? {

@@ -7,9 +7,18 @@ import {
   UserRoundPlus,
   UsersRound,
 } from "lucide-react";
+import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useSessionActions } from "@/stores/session/provider";
 
 export function AuthControls({
@@ -20,6 +29,7 @@ export function AuthControls({
   destination?: string;
 }) {
   const actions = useSessionActions();
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   if (!actions) return null;
   return (
     <div className="flex flex-col gap-3">
@@ -73,8 +83,42 @@ export function AuthControls({
       {actions.error && (
         <Alert variant="destructive">
           <AlertDescription>{actions.error}</AlertDescription>
+          {actions.departureBlocked && (
+            <Button
+              variant="destructive"
+              disabled={actions.busy}
+              onClick={() => setConfirmDiscard(true)}
+            >
+              Discard edits and leave
+            </Button>
+          )}
         </Alert>
       )}
+      <Dialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard unconfirmed edits and leave?</DialogTitle>
+            <DialogDescription>
+              Download a local backup from your workspace first if you want to
+              keep these edits. This discards this tab&apos;s pending changes.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDiscard(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmDiscard(false);
+                void actions.discardAndLeave();
+              }}
+            >
+              Discard edits and leave
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

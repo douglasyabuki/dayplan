@@ -13,6 +13,7 @@ import { flushSync } from "react-dom";
 import { authClient } from "@/lib/auth-client";
 import { safeWorkspaceDestination } from "@/lib/workspace/entry";
 
+import { departureHandler } from "./departure";
 import type { Session } from "./model";
 
 const SessionContext = createContext<Session | null>(null);
@@ -24,6 +25,9 @@ export type SessionActions = {
   retry: () => Promise<void>;
   busy: boolean;
   error: string;
+  departureBlocked: boolean;
+  discardAndLeave: () => Promise<void>;
+  retryDeparture: () => Promise<void>;
 };
 
 const SessionActionsContext = createContext<SessionActions | null>(null);
@@ -51,6 +55,9 @@ function LiveSessionProvider({ children }: { children: ReactNode }) {
   const refetch = query.refetch;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [preparing, setPreparing] = useState(false);
+  const [departureBlocked, setDepartureBlocked] = useState(false);
+  const leaveAction = useRef<(() => Promise<void>) | null>(null);
   const pending = useRef(false);
   useEffect(() => {
     const invalid = (event: Event) => {
@@ -81,15 +88,34 @@ function LiveSessionProvider({ children }: { children: ReactNode }) {
             }
           : { status: "guest" };
 
-  async function run(operation: () => Promise<void>) {
+  async function run(
+    operation: () => Promise<void>,
+    leaving = false,
+    discard = false,
+  ) {
     if (pending.current) return;
     pending.current = true;
-    // Commit the loading boundary and run provider cleanup before cookie changes.
-    flushSync(() => {
-      setBusy(true);
-      setError("");
-    });
+    setPreparing(leaving);
+    const departure = departureHandler(query.data?.user.id);
     try {
+      if (leaving && departure) {
+        if (discard) await departure.discard();
+        else if (!(await departure.prepare(Date.now() + 10000))) {
+          setDepartureBlocked(true);
+          leaveAction.current = operation;
+          setError(
+            "Some edits are neither confirmed by the server nor safely stored for recovery. Retry saving, download a backup, or explicitly discard edits before leaving.",
+          );
+          departure.resume();
+          return;
+        }
+      }
+      setDepartureBlocked(false);
+      // Commit the loading boundary and run provider cleanup before cookie changes.
+      flushSync(() => {
+        setBusy(true);
+        setError("");
+      });
       await operation();
     } catch (cause) {
       setError(
@@ -98,7 +124,9 @@ function LiveSessionProvider({ children }: { children: ReactNode }) {
           : "Authentication failed. Please retry.",
       );
     } finally {
+      if (leaving) departure?.resume();
       pending.current = false;
+      setPreparing(false);
       setBusy(false);
     }
   }
@@ -132,19 +160,28 @@ function LiveSessionProvider({ children }: { children: ReactNode }) {
   }
 
   const actions: SessionActions = {
-    busy,
+    busy: busy || preparing,
     error,
+    departureBlocked,
+    retryDeparture: async () => {
+      const operation = leaveAction.current;
+      if (operation) await run(operation, true);
+    },
+    discardAndLeave: async () => {
+      const operation = leaveAction.current;
+      if (operation) await run(operation, true, true);
+    },
     signIn: (destination) => run(() => google(destination)),
     signOut: (onSuccess) =>
       run(async () => {
         await logout();
         onSuccess?.();
-      }),
+      }, true),
     switchAccount: (destination) =>
       run(async () => {
         await logout();
         await google(destination);
-      }),
+      }, true),
     retry: () =>
       run(async () => {
         await query.refetch();
