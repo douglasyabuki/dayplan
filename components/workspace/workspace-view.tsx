@@ -77,6 +77,7 @@ import { priorities } from "@/types-and-constants/tasks";
 import { WorkspaceContentLoading } from "./workspace-content-loading";
 import { WorkspaceFooter } from "./workspace-footer";
 import { WorkspaceHeader } from "./workspace-header";
+import { WorkspaceSearchInput } from "./workspace-search-input";
 
 const sortOptions: {
   value: string;
@@ -260,13 +261,7 @@ export function WorkspaceView({
           {view === "search" && (
             <div className="text-muted-foreground mb-6 flex items-center gap-3">
               <Search className="size-5" />
-              <Input
-                aria-label="Search all tasks"
-                autoFocus
-                placeholder="Search tasks, notes, projects, and tags…"
-                value={params.get("q") ?? ""}
-                onChange={(e) => setParams({ q: e.target.value }, true)}
-              />
+              <WorkspaceSearchInput query={params.get("q") ?? ""} />
             </div>
           )}
           <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
