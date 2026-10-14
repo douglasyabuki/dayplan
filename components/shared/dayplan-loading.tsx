@@ -31,7 +31,7 @@ export function DayplanLoading({
         className="text-primary size-16"
       >
         <svg width="64" height="42" viewBox="0 0 64 42" overflow="hidden">
-          <g className="animate-[dayplan-sunrise_2.8s_ease-in-out_infinite] motion-reduce:animate-none">
+          <g className="animate-[dayplan-sunrise_2.8s_ease-in-out_infinite_alternate] motion-reduce:animate-none">
             <circle
               cx="32"
               cy="42"
@@ -39,7 +39,7 @@ export function DayplanLoading({
               fill="currentColor"
               fillOpacity="0.08"
             />
-            <g className="animate-[dayplan-daylight_2.8s_ease-in-out_infinite] motion-reduce:animate-none">
+            <g className="animate-[dayplan-daylight_2.8s_ease-in-out_infinite_alternate] motion-reduce:animate-none">
               <path d="M32 17v5 M14 24l4 4 M50 24l-4 4 M7 42h5 M52 42h5" />
             </g>
           </g>
