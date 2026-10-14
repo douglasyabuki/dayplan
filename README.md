@@ -17,16 +17,39 @@ Use Node.js 22.12+ and npm, with a PostgreSQL database available for authenticat
 | `GOOGLE_CLIENT_ID`     | Google Web application OAuth client ID.                        |
 | `GOOGLE_CLIENT_SECRET` | Matching Google OAuth client secret.                           |
 
-3. Generate the Prisma client and apply the checked-in migrations to your development database:
+3. Choose your development database:
+
+   **Local PostgreSQL (default):** Install and start Docker Desktop with Docker Compose v2, then run:
 
    ```sh
-   npx prisma generate
-   npx prisma migrate deploy
-   npm run db:check
-   npm run dev
+   npm run dev:local
+   # npm run dev is an alias for dev:local
    ```
 
-Next.js and `prisma.config.ts` load `.env.development.local` during development. Keep real credentials in ignored environment files or deployment environment variables.
+   This starts PostgreSQL 17 from [docker-compose.yml](docker-compose.yml), waits for its health check, generates the Prisma client, applies checked-in migrations, and starts Next.js. The database is bound to `127.0.0.1:5433` with the development-only URL `postgresql://dayplan:dayplan@127.0.0.1:5433/dayplan?schema=public`. The runner overrides `DATABASE_URL` for this process, even if your environment files or shell contain a hosted URL. Authentication settings still come from your existing environment files.
+
+   **Hosted Prisma Postgres:** Keep its direct PostgreSQL connection string in `DATABASE_URL` in `.env.development.local`, then run:
+
+   ```sh
+   # Apply migrations explicitly when needed (including first setup).
+   npm run db:prisma:migrate
+   npm run dev:prisma
+   ```
+
+   Hosted startup generates the Prisma client and starts Next.js; it does not automatically migrate the hosted database. Both modes accept Next.js flags, for example `npm run dev:local -- --port 3001` (update `BETTER_AUTH_URL` and your OAuth redirect URI to match).
+
+Next.js and `prisma.config.ts` load `.env.development.local` during development. Keep real credentials in ignored environment files or deployment environment variables. The existing generic `db:check` and direct Prisma CLI commands use your configured `DATABASE_URL`; use the explicit commands below to select the database.
+
+| Command                     | Purpose                                                               |
+| --------------------------- | --------------------------------------------------------------------- |
+| `npm run db:local:up`       | Start Docker PostgreSQL and wait until healthy.                       |
+| `npm run db:local:down`     | Stop/remove the container while retaining its data volume.            |
+| `npm run db:local:migrate`  | Start local PostgreSQL and apply checked-in migrations.               |
+| `npm run db:local:check`    | Start local PostgreSQL and verify connectivity through Prisma.        |
+| `npm run db:prisma:migrate` | Apply checked-in migrations to the configured hosted database.        |
+| `npm run db:prisma:check`   | Verify connectivity to the configured hosted database through Prisma. |
+
+Local data persists in the Compose `postgres-data` volume across restarts. Stopping Next.js leaves the database running; use `db:local:down` when finished. The two databases have separate accounts and workspaces; switching modes does not copy data between them.
 
 For Google sign-in, register `http://localhost:3000/api/auth/callback/google` as an authorized redirect URI in the Google OAuth client. For a deployment, use its app origin in both `BETTER_AUTH_URL` and the callback URI. Google credentials are optional for guest use; account sign-in reports that it is unavailable when they are missing.
 
