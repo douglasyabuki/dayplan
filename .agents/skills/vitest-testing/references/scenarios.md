@@ -1,0 +1,26 @@
+# Conditional Dayplan scenarios
+
+Select relevant entries only. These are repository contracts inferred from inspected code/tests, not framework requirements. Recheck product requirements and current implementation; unimplemented requirements remain future acceptance criteria.
+
+| Affected behavior | Meaningful checks and starting points |
+| --- | --- |
+| Recurrence | Explicit expected dates, occurrence/series scope, relevant exceptions/parent-child placement, and preservation of other occurrences. Do not calculate expectations through the recurrence algorithm. `task-operations.unit.test.ts`, `workspace-transitions.unit.test.ts`, `lib/tasks/recurrence.ts`. |
+| Grouped mutations | One complete validated outcome, immutable input, no partial state after rejection. Check stored data when persistence atomicity is the contract. `commands.ts`, reducer/transitions, `workspace-tags.browser.test.tsx`. |
+| Debounced saves | Currently recovery stages immediately; account saves occur after 10s idle or 60s from first unsaved edit. Check before/at deadlines, latest payload, edits during saves, flush, immediate fallback on unavailable recovery storage, and close cancellation. Guest saves are immediate. `account-debounce.unit.test.ts`, `workspace-sync.unit.test.ts`. |
+| Safe retry / revision conflicts | Same operation ID/payload reconciles without extra revision; changed payload with that ID fails. New operation with stale revision conflicts without overwriting remote state. Control ambiguous/late transport responses; real DB verifies receipts/atomicity. `account-data-source.unit.test.ts`, `account-persistence.unit.test.ts`. |
+| Remote adoption / drafts | Sync flushes first; duplicate requests and mutations while syncing are guarded. Identical refresh preserves Undo; changed adoption invalidates captured Undo/stale draft submission. Check edited-field/deletion review and malformed refresh preserving local data where relevant. `workspace-sync.browser.test.tsx`, `draft-guard.unit.test.ts`. |
+| Account switching | Close old lifetime before departure; old responses cannot mutate a new owner. Unprotected pending work blocks leaving; discard needs explicit confirmation. Failed sign-out restores identity; account errors cannot silently become guests. `session-auth.browser.test.tsx`, `account-workspace.browser.test.tsx`, `stores/session/provider.tsx`. |
+| Recovery / malformed storage | Preserve malformed/unavailable bytes and in-memory data; no automatic destructive reseeding. Recovery is owner-scoped. Verify failed/explicit reset/retry, confirmation before guest cleanup, and changed data after confirmation. `workspace-lifecycle.browser.test.tsx`, `account-recovery.browser.test.tsx`, `guest-cleanup.unit.test.ts`. |
+| Late responses | Resolve promises after close/switch/timeout/newer actions; assert no stale state/UI/storage write or later sending of expired queued work. Guard late completions even if transport ignores abort. `workspace-persistence.unit.test.ts`, `workspace-sync.unit.test.ts`, account browser suites. |
+
+Undo exists as the provider's notice snapshot with an epoch guard, not a general history stack. Failed/no-op operations retain prior successful Undo; successful reset/restore/clear invalidates it, while failed replacement preserves it. Verify the affected path before asserting these contracts. No redo API was found; do not invent redo tests or require undo for explicitly irreversible operations. Start with workspace-tags/workspace-lifecycle browser suites and `stores/workspace/provider.tsx`.
+
+## Database boundary and limits
+
+`account-persistence.unit.test.ts` uses real isolated **PGlite 0.4.3**, PGlite socket server **0.1.3** on `127.0.0.1` port 0, and real PrismaPg/client **7.10.0** with pool `max: 1`. It applies three explicit migration SQL files, injects `globalThis.dayplanPrisma`, seeds test users/sessions, and stubs auth URL/secret. It never uses connected `DATABASE_URL`. Teardown disconnects Prisma, stops the socket server, closes PGlite, and unstubs env.
+
+The suite exercises ownership/routes, receipts, conflicts, concurrent requests, imports, and rollback when receipt insertion fails. It shares one database across the file and some revision expectations build on prior tests; filtering an individual test can omit required state. Prefer the whole file. Do not make these cases concurrent without explicit isolation. `social-linking.unit.test.ts` similarly uses a file-scoped database, resets user/verification rows before each test, and mocks OAuth transport/provider responses while exercising real auth/database behavior.
+
+For new cases use fresh identities/data or an explicit reset/isolated DB. Register cleanup for partially failed setup; restore injected globals when crossing file lifetimes. File isolation does not isolate external resources. [Hooks](https://vitest.dev/api/hooks), [parallelism](https://vitest.dev/guide/parallelism).
+
+PGlite with a single-connection pool cannot prove production PostgreSQL multi-connection locking/contention, real OAuth/networking, or later migrations absent from the explicit list. Mocked persistence proves even less about ownership/atomic writes. If those guarantees matter, identify additional isolated integration infrastructure and report the gap; do not silently connect to a developer/production database.
