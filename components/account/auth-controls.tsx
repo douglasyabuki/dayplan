@@ -4,8 +4,10 @@ import {
   LogIn,
   LogOut,
   RefreshCw,
+  Trash2,
   UserRoundPlus,
   UsersRound,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -24,9 +26,11 @@ import { useSessionActions } from "@/stores/session/provider";
 export function AuthControls({
   authenticated = false,
   destination,
+  beforeDeparture,
 }: {
   authenticated?: boolean;
   destination?: string;
+  beforeDeparture?: () => Promise<boolean>;
 }) {
   const actions = useSessionActions();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -39,15 +43,25 @@ export function AuthControls({
             <Button
               variant="outline"
               disabled={actions.busy}
-              onClick={() => void actions.switchAccount(destination)}
+              onClick={() =>
+                void (async () => {
+                  if (!beforeDeparture || (await beforeDeparture()))
+                    await actions.switchAccount(destination, beforeDeparture);
+                })()
+              }
             >
               <UsersRound data-icon="inline-start" aria-hidden="true" />
-              Switch Google account
+              Switch account
             </Button>
             <Button
               variant="outline"
               disabled={actions.busy}
-              onClick={() => void actions.signOut()}
+              onClick={() =>
+                void (async () => {
+                  if (!beforeDeparture || (await beforeDeparture()))
+                    await actions.signOut(undefined, beforeDeparture);
+                })()
+              }
             >
               <LogOut data-icon="inline-start" aria-hidden="true" />
               Sign out
@@ -89,6 +103,7 @@ export function AuthControls({
               disabled={actions.busy}
               onClick={() => setConfirmDiscard(true)}
             >
+              <Trash2 data-icon="inline-start" aria-hidden="true" />
               Discard edits and leave
             </Button>
           )}
@@ -105,6 +120,7 @@ export function AuthControls({
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDiscard(false)}>
+              <X data-icon="inline-start" aria-hidden="true" />
               Cancel
             </Button>
             <Button
@@ -114,6 +130,7 @@ export function AuthControls({
                 void actions.discardAndLeave();
               }}
             >
+              <Trash2 data-icon="inline-start" aria-hidden="true" />
               Discard edits and leave
             </Button>
           </DialogFooter>

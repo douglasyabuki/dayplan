@@ -605,6 +605,47 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
     return recovered ?? snapshot;
   }
 
+  /** Refresh only confirmed data; unlike reload this never discards unresolved edits. */
+  async refresh(signal: AbortSignal): Promise<Workspace | null> {
+    await this.stagingQueue;
+    return accountCoordinated(
+      this.accountId,
+      signal,
+      Date.now() + 10000,
+      async () => {
+        if (this.pendingSave || this.pendingImport || this.latest)
+          throw new PersistenceError(
+            "sync_pending",
+            "Confirm local edits before retrieving remote changes.",
+          );
+        const result = await this.connection.request<{
+          snapshot: Workspace | null;
+          revision: number;
+        }>("/api/workspace", signal);
+        signal.throwIfAborted();
+        if (
+          !Number.isSafeInteger(result.revision) ||
+          result.revision < this.revision ||
+          (result.snapshot === null && result.revision !== 0)
+        )
+          throw new PersistenceError(
+            "invalid_remote",
+            "The remote workspace revision could not be verified.",
+          );
+        const snapshot =
+          result.snapshot === null ? null : validateWorkspace(result.snapshot);
+        if (this.pendingSave || this.pendingImport || this.latest)
+          throw new PersistenceError(
+            "sync_pending",
+            "Local edits changed during sync. They have been kept.",
+          );
+        this.revision = result.revision;
+        this.saved = snapshot ? JSON.stringify(snapshot) : "";
+        return snapshot;
+      },
+    );
+  }
+
   async reload(signal: AbortSignal): Promise<Workspace | null> {
     if (this.pendingSave) {
       try {

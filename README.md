@@ -1,6 +1,6 @@
 # Dayplan
 
-A task manager with browser-local guest access and database-backed accounts. Built with Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, shadcn/Base UI, and `@dnd-kit/react`. Google authentication uses Better Auth; account data is stored in PostgreSQL through Prisma ORM 7 and its PostgreSQL driver adapter.
+A task manager with browser-local guest access and database-backed accounts. Built with Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, shadcn/Base UI, and `@dnd-kit/react`. Google and GitHub authentication use Better Auth; account data is stored in PostgreSQL through Prisma ORM 7 and its PostgreSQL driver adapter.
 
 ## Start
 
@@ -16,21 +16,56 @@ Use Node.js 22.12+ and npm, with a PostgreSQL database available for authenticat
 | `BETTER_AUTH_SECRET`   | Random authentication secret of at least 32 characters.        |
 | `GOOGLE_CLIENT_ID`     | Google Web application OAuth client ID.                        |
 | `GOOGLE_CLIENT_SECRET` | Matching Google OAuth client secret.                           |
+| `GITHUB_CLIENT_ID`     | GitHub OAuth app client ID.                                    |
+| `GITHUB_CLIENT_SECRET` | Matching GitHub OAuth app client secret.                       |
 
-3. Generate the Prisma client and apply the checked-in migrations to your development database:
+3. Choose your development database:
+
+   **Local PostgreSQL (default):** Install and start Docker Desktop with Docker Compose v2, then run:
 
    ```sh
-   npx prisma generate
-   npx prisma migrate deploy
-   npm run db:check
-   npm run dev
+   npm run dev:local
+   # npm run dev is an alias for dev:local
    ```
 
-Next.js and `prisma.config.ts` load `.env.development.local` during development. Keep real credentials in ignored environment files or deployment environment variables.
+   This starts PostgreSQL 17 from [docker-compose.yml](docker-compose.yml), waits for its health check, generates the Prisma client, applies checked-in migrations, and starts Next.js. The database is bound to `127.0.0.1:5433` with the development-only URL `postgresql://dayplan:dayplan@127.0.0.1:5433/dayplan?schema=public`. The runner overrides `DATABASE_URL` for this process, even if your environment files or shell contain a hosted URL. Authentication settings still come from your existing environment files.
 
-For Google sign-in, register `http://localhost:3000/api/auth/callback/google` as an authorized redirect URI in the Google OAuth client. For a deployment, use its app origin in both `BETTER_AUTH_URL` and the callback URI. Google credentials are optional for guest use; account sign-in reports that it is unavailable when they are missing.
+   **Hosted Prisma Postgres:** Keep its direct PostgreSQL connection string in `DATABASE_URL` in `.env.development.local`, then run:
 
-Open `http://localhost:3000`. The root redirects to Today; first-time guests are sent to `/welcome` to choose how to continue. Returning guests and signed-in users use the same workspace routes. `/sign-in` and `/sign-up` both use Google. On Windows PowerShell, use `npm.cmd` or `npx.cmd` if script execution policy blocks their PowerShell wrappers.
+   ```sh
+   # Apply migrations explicitly when needed (including first setup).
+   npm run db:prisma:migrate
+   npm run dev:prisma
+   ```
+
+   Hosted startup generates the Prisma client and starts Next.js; it does not automatically migrate the hosted database. Both modes accept Next.js flags, for example `npm run dev:local -- --port 3001` (update `BETTER_AUTH_URL` and your OAuth redirect URI to match).
+
+Next.js and `prisma.config.ts` load `.env.development.local` during development. Keep real credentials in ignored environment files or deployment environment variables. The existing generic `db:check` and direct Prisma CLI commands use your configured `DATABASE_URL`; use the explicit commands below to select the database.
+
+| Command                     | Purpose                                                               |
+| --------------------------- | --------------------------------------------------------------------- |
+| `npm run db:local:up`       | Start Docker PostgreSQL and wait until healthy.                       |
+| `npm run db:local:down`     | Stop/remove the container while retaining its data volume.            |
+| `npm run db:local:migrate`  | Start local PostgreSQL and apply checked-in migrations.               |
+| `npm run db:local:check`    | Start local PostgreSQL and verify connectivity through Prisma.        |
+| `npm run db:prisma:migrate` | Apply checked-in migrations to the configured hosted database.        |
+| `npm run db:prisma:check`   | Verify connectivity to the configured hosted database through Prisma. |
+
+Local data persists in the Compose `postgres-data` volume across restarts. Stopping Next.js leaves the database running; use `db:local:down` when finished. The two databases have separate accounts and workspaces; switching modes does not copy data between them.
+
+For Google sign-in, register `http://localhost:3000/api/auth/callback/google` as an authorized redirect URI in the Google OAuth client. For a deployment, use its app origin in both `BETTER_AUTH_URL` and the callback URI.
+
+For GitHub sign-in, create a GitHub OAuth app and set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in your ignored environment files or hosting environment. `.env.example` contains empty placeholders only. Use these callbacks:
+
+- Local: `http://localhost:3000/api/auth/callback/github`
+- Preview: `https://dayplan-git-develop-douglasyabukis-projects.vercel.app/api/auth/callback/github`
+- Production: `https://douglasyabuki-dayplan.vercel.app/api/auth/callback/github`
+
+Set `BETTER_AUTH_URL` to the matching environment origin. Keep GitHub user access token expiration enabled and Device Flow disabled. Use separate production credentials if you want independent credential rotation. Both providers are optional and independently configured; missing credentials disable only that provider's buttons. Guests can continue without either provider.
+
+Matching resolved, verified emails automatically link Google and GitHub to the same Dayplan user. Settings → Account → Connected accounts supports explicitly connecting different verified emails while signed in. Secondary GitHub emails are not used for custom matching; a private profile email is resolved through GitHub's email API. Connecting preserves your Dayplan profile and workspace. Identities owned by another user cannot be connected, and at least one sign-in method must remain. Validate real provider consent and callback flows after filling in credentials.
+
+Open `http://localhost:3000`. The root redirects to Today; first-time guests are sent to `/welcome` to choose how to continue. Returning guests and signed-in users use the same workspace routes. `/sign-in` and `/sign-up` both offer Google and GitHub. On Windows PowerShell, use `npm.cmd` or `npx.cmd` if script execution policy blocks their PowerShell wrappers.
 
 New guest workspaces start with sample tasks dated relative to their creation and are saved under `dayplan.workspace.v2` in browser local storage. New account workspaces start empty. Settings provides sample-data reset, clear-data, and JSON backup/restore actions for the current workspace.
 

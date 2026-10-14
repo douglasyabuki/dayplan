@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowLeft, Sunrise } from "lucide-react";
+import {
+  ArrowLeft,
+  LoaderCircle,
+  RefreshCw,
+  Sunrise,
+  UserRound,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSyncExternalStore } from "react";
@@ -15,7 +21,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useAuthOptions } from "@/hooks/account/use-auth-options";
+import { authErrorMessage, parseAuthProvider } from "@/lib/auth-feedback";
 import { useSessionActions } from "@/stores/session/provider";
+import { authProviders, providerNames } from "@/types-and-constants/auth";
+
+import { ProviderIcon } from "./provider-icon";
 
 const subscribe = () => () => {};
 
@@ -29,13 +40,17 @@ export function AuthScreen({ mode }: { mode: "sign-in" | "sign-up" }) {
   const params = useSearchParams();
   const signingUp = mode === "sign-up";
   const actions = useSessionActions();
+  const availability = useAuthOptions();
   const next = params.get("next");
   const query = next ? { next } : {};
 
   const error =
     actions?.error ||
     (params.has("authError") || params.has("error")
-      ? "Google sign-in was not completed. Please try again."
+      ? authErrorMessage(
+          params.get("error"),
+          parseAuthProvider(params.get("provider")),
+        )
       : "");
 
   return (
@@ -74,23 +89,77 @@ export function AuthScreen({ mode }: { mode: "sign-in" | "sign-up" }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <Button
-              type="button"
-              size="lg"
-              className="w-full"
-              disabled={!hydrated || !actions || actions.busy}
-              aria-busy={actions?.busy}
-              onClick={() => void actions?.signIn(next ?? undefined)}
-            >
-              {actions?.busy ? "Connecting to Google…" : "Continue with Google"}
-            </Button>
+            <div className="flex flex-col gap-3">
+              {authProviders.map((provider) => {
+                const pending = actions?.pendingAction?.provider === provider;
+                return (
+                  <div key={provider} className="flex flex-col gap-1.5">
+                    <Button
+                      type="button"
+                      size="lg"
+                      variant="outline"
+                      className="w-full"
+                      disabled={
+                        !hydrated ||
+                        !actions ||
+                        actions.busy ||
+                        !availability.options?.[provider]
+                      }
+                      aria-busy={pending}
+                      aria-describedby={
+                        availability.options && !availability.options[provider]
+                          ? `${provider}-unavailable`
+                          : undefined
+                      }
+                      onClick={() =>
+                        void actions?.signIn(provider, next ?? undefined)
+                      }
+                    >
+                      {pending ? (
+                        <LoaderCircle
+                          data-icon="inline-start"
+                          className="animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <ProviderIcon
+                          provider={provider}
+                          data-icon="inline-start"
+                        />
+                      )}
+                      {pending
+                        ? `Connecting to ${providerNames[provider]}…`
+                        : `Continue with ${providerNames[provider]}`}
+                    </Button>
+                    {availability.options &&
+                      !availability.options[provider] && (
+                        <p
+                          id={`${provider}-unavailable`}
+                          className="text-muted-foreground text-xs"
+                        >
+                          {providerNames[provider]} sign-in isn’t available yet.
+                        </p>
+                      )}
+                  </div>
+                );
+              })}
+            </div>
+            {availability.error && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Sign-in options could not be loaded.
+                </AlertDescription>
+                <Button variant="outline" onClick={availability.retry}>
+                  <RefreshCw data-icon="inline-start" aria-hidden="true" />
+                  Retry sign-in options
+                </Button>
+              </Alert>
+            )}
             <p className="text-muted-foreground text-sm">
-              {signingUp
-                ? "Create your Dayplan account with your Google account."
-                : "Use your Google account to sign in to Dayplan."}
+              Use Google or GitHub. No Dayplan password needed.
             </p>
             {error && (
-              <Alert variant="destructive" aria-label="Google sign-in error">
+              <Alert variant="destructive" aria-label="Sign-in error">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
@@ -109,6 +178,7 @@ export function AuthScreen({ mode }: { mode: "sign-in" | "sign-up" }) {
               href={{ pathname: "/welcome", query }}
               className={buttonVariants({ variant: "link" })}
             >
+              <UserRound data-icon="inline-start" aria-hidden="true" />
               Explore as a guest
             </Link>
           </CardFooter>

@@ -8,6 +8,7 @@ import {
   Laptop,
   Sun,
   Sunrise,
+  UserRound,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
@@ -27,6 +28,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { features } from "@/components/welcome/features";
 import { WorkspaceLoading } from "@/components/workspace/workspace-loading";
+import { authErrorMessage, parseAuthProvider } from "@/lib/auth-feedback";
 import { safeWorkspaceDestination } from "@/lib/workspace/entry";
 import { useOnboarding } from "@/stores/onboarding/provider";
 import { useSession } from "@/stores/session/provider";
@@ -118,6 +120,7 @@ export function Welcome() {
                     router.replace(next);
                   }}
                 >
+                  <UserRound data-icon="inline-start" aria-hidden="true" />
                   Continue without an account
                 </Button>
               </div>
@@ -131,7 +134,10 @@ export function Welcome() {
               {params.get("authError") && (
                 <Alert variant="destructive">
                   <AlertDescription>
-                    Google sign-in was cancelled or failed. Please try again.
+                    {authErrorMessage(
+                      params.get("error"),
+                      parseAuthProvider(params.get("provider")),
+                    )}
                   </AlertDescription>
                 </Alert>
               )}

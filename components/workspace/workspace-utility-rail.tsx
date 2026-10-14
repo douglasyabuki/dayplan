@@ -30,6 +30,8 @@ import { useSession, useSessionActions } from "@/stores/session/provider";
 import { useWorkspace } from "@/stores/workspace/provider";
 import type { SettingsPanel } from "@/types-and-constants/settings";
 
+import { WorkspaceSyncControl } from "./workspace-sync-control";
+
 export function WorkspaceUtilityRail({
   settings,
   close,
@@ -142,6 +144,12 @@ export function WorkspaceUtilityRail({
       >
         <Search />
       </Button>
+      <WorkspaceSyncControl
+        openData={(trigger) => {
+          settings("data", trigger);
+          close?.();
+        }}
+      />
       <Button
         className="mt-auto"
         variant="ghost"

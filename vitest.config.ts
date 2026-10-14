@@ -19,6 +19,7 @@ export default defineConfig({
       "@base-ui/react/avatar",
       "@base-ui/react/select",
       "@base-ui/react/popover",
+      "@base-ui/react/tooltip",
       "@base-ui/react/toggle",
       "@base-ui/react/toggle-group",
       "react-day-picker",

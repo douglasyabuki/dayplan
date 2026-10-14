@@ -22,6 +22,20 @@ export function googleSignInConfigured(): boolean {
 let instance: ReturnType<typeof betterAuth> | undefined;
 
 /**
+ * Reports whether GitHub sign-in has its required server settings.
+ * @returns {boolean} True when GitHub credentials, the auth secret, and base URL are configured.
+ * @example if (!githubSignInConfigured()) return Response.json({ available: false });
+ */
+export function githubSignInConfigured(): boolean {
+  return Boolean(
+    process.env.GITHUB_CLIENT_ID &&
+    process.env.GITHUB_CLIENT_SECRET &&
+    process.env.BETTER_AUTH_SECRET &&
+    process.env.BETTER_AUTH_URL,
+  );
+}
+
+/**
  * Creates the server-only authentication service on first use.
  * @returns {ReturnType<typeof betterAuth>} The shared database-backed auth service; throws when core settings are absent.
  * @example const session = await getAuth().api.getSession({ headers: request.headers });
@@ -34,15 +48,36 @@ export function getAuth(): ReturnType<typeof betterAuth> {
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.BETTER_AUTH_URL,
     database: prismaAdapter(getPrisma(), { provider: "postgresql" }),
-    socialProviders: googleSignInConfigured()
-      ? {
-          google: {
-            clientId: process.env.GOOGLE_CLIENT_ID!,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-            prompt: "select_account",
-          },
-        }
-      : {},
+    socialProviders: {
+      ...(googleSignInConfigured()
+        ? {
+            google: {
+              clientId: process.env.GOOGLE_CLIENT_ID!,
+              clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+              prompt: "select_account",
+            },
+          }
+        : {}),
+      ...(githubSignInConfigured()
+        ? {
+            github: {
+              clientId: process.env.GITHUB_CLIENT_ID!,
+              clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+            },
+          }
+        : {}),
+    },
+    account: {
+      accountLinking: {
+        enabled: true,
+        disableImplicitLinking: false,
+        // Neither provider may bypass verification of its resolved email.
+        trustedProviders: [],
+        allowDifferentEmails: true,
+        allowUnlinkingAll: false,
+        updateUserInfoOnLink: false,
+      },
+    },
     session: { cookieCache: { enabled: false } },
     logger: { disabled: true },
   };

@@ -25,6 +25,8 @@ const auth = vi.hoisted(() => ({
     refetch: vi.fn(async () => undefined),
   },
   signOut: vi.fn(async () => ({ error: null as null | { message: string } })),
+  navigate: vi.fn(),
+  link: vi.fn(async () => ({ error: null })),
   social: vi.fn(async (...args: unknown[]) => {
     void args;
     return {
@@ -33,11 +35,14 @@ const auth = vi.hoisted(() => ({
   }),
 }));
 
+vi.mock("@/lib/auth-navigation", () => ({ navigateToSignIn: auth.navigate }));
+
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     useSession: () => auth.query,
     signOut: auth.signOut,
     signIn: { social: auth.social },
+    linkSocial: auth.link,
   },
 }));
 
@@ -50,6 +55,8 @@ afterEach(() => {
   auth.query.refetch.mockClear();
   auth.signOut.mockReset().mockResolvedValue({ error: null });
   auth.social.mockReset().mockResolvedValue({ error: null });
+  auth.navigate.mockReset();
+  auth.link.mockReset().mockResolvedValue({ error: null });
 });
 
 function Harness({ departed }: { departed?: () => void }) {
@@ -206,7 +213,7 @@ test("unprotected work blocks switching, and discarding requires an explicit con
         <Harness />
       </SessionProvider>,
     );
-    await screen.getByRole("button", { name: "Switch Google account" }).click();
+    await screen.getByRole("button", { name: "Switch account" }).click();
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("neither confirmed");
@@ -229,6 +236,58 @@ test("unprotected work blocks switching, and discarding requires an explicit con
       .click();
     await expect.poll(() => auth.signOut.mock.calls.length).toBe(1);
     expect(discard).toHaveBeenCalledOnce();
+    expect(auth.navigate).toHaveBeenCalledWith("/today");
+  } finally {
+    unregister();
+  }
+});
+
+test("connecting prepares departure without unmounting the account or changing credentials", async () => {
+  auth.query.data = { user: { id: "connecting" }, session: { id: "session" } };
+  let finish!: (value: { error: null }) => void;
+  auth.link.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const departed = vi.fn();
+  const prepare = vi.fn().mockResolvedValue(true);
+  const unregister = registerDeparture("connecting", {
+    prepare,
+    resume: vi.fn(),
+    discard: vi.fn(),
+  });
+  function Connect() {
+    const actions = useSessionActions();
+    return (
+      <button
+        onClick={() =>
+          void actions?.connect(
+            "github",
+            "/inbox?settings=account",
+            "/inbox?settings=account&connection=error",
+          )
+        }
+      >
+        Connect provider
+      </button>
+    );
+  }
+  try {
+    const screen = await render(
+      <SessionProvider>
+        <Harness departed={departed} />
+        <Connect />
+      </SessionProvider>,
+    );
+    await screen.getByRole("button", { name: "Connect provider" }).click();
+    await expect.poll(() => auth.link.mock.calls.length).toBe(1);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(departed).not.toHaveBeenCalled();
+    expect(auth.signOut).not.toHaveBeenCalled();
+    await expect.element(screen.getByText("connecting:session")).toBeVisible();
+    finish({ error: null });
   } finally {
     unregister();
   }
@@ -247,6 +306,64 @@ function EditingAccount() {
       <WorkspaceFeedback />
     </>
   );
+}
+
+for (const method of ["retryDeparture", "discardAndLeave"] as const) {
+  test(`blocked connections preserve the account and recheck profile saves on ${method}`, async () => {
+    auth.query.data = {
+      user: { id: "blocked-connection" },
+      session: { id: "session" },
+    };
+    const departed = vi.fn();
+    const saveProfile = vi.fn().mockResolvedValue(true);
+    const unregister = registerDeparture("blocked-connection", {
+      prepare: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
+      resume: vi.fn(),
+      discard: vi.fn().mockResolvedValue(undefined),
+    });
+    function Connect() {
+      const actions = useSessionActions();
+      return (
+        <>
+          <button
+            onClick={() =>
+              void actions?.connect(
+                "github",
+                "/inbox",
+                "/inbox?connection=error",
+                saveProfile,
+              )
+            }
+          >
+            Start connection
+          </button>
+          <button onClick={() => void actions?.[method]()}>
+            Resume connection
+          </button>
+        </>
+      );
+    }
+    try {
+      const screen = await render(
+        <SessionProvider>
+          <Harness departed={departed} />
+          <Connect />
+        </SessionProvider>,
+      );
+      await screen.getByRole("button", { name: "Start connection" }).click();
+      await expect
+        .element(screen.getByRole("alert"))
+        .toHaveTextContent("neither confirmed");
+      expect(auth.link).not.toHaveBeenCalled();
+      await screen.getByRole("button", { name: "Resume connection" }).click();
+      await expect.poll(() => auth.link.mock.calls.length).toBe(1);
+      expect(saveProfile).toHaveBeenCalledTimes(2);
+      expect(departed).not.toHaveBeenCalled();
+      expect(auth.signOut).not.toHaveBeenCalled();
+    } finally {
+      unregister();
+    }
+  });
 }
 
 test("real departure bypasses debounce and sends frozen edits before sign-out", async () => {

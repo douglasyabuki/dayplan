@@ -5,6 +5,7 @@ import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { addDays } from "@/lib/dates";
 import { type DraftEntries, sessionTasks } from "@/lib/tasks/editor";
 import { newTask } from "@/lib/tasks/factory";
+import type { TaskOperation } from "@/lib/tasks/operations";
 import { validateTaskDraft } from "@/lib/tasks/operations";
 import {
   asOccurrence,
@@ -13,9 +14,14 @@ import {
   referenceKey,
   resolveOccurrence,
 } from "@/lib/tasks/recurrence";
-import { commitDrafts } from "@/stores/workspace/commands";
+import {
+  draftCanApply,
+  type DraftExpectation,
+  draftKey,
+} from "@/stores/workspace/draft-guard";
 import { useWorkspace } from "@/stores/workspace/provider";
 import type { Occurrence } from "@/types-and-constants/tasks";
+import type { Workspace } from "@/types-and-constants/workspace";
 
 export function useEditorSession(
   task: Occurrence,
@@ -23,6 +29,9 @@ export function useEditorSession(
   close: () => void,
 ) {
   const workspace = useWorkspace();
+  const [initialState] = useState(() => structuredClone(workspace.state));
+  const [baselines, setBaselines] = useState<Record<string, Workspace>>({});
+  const [reviewRevision, setReviewRevision] = useState(0);
   const [entries, setEntries] = useState<DraftEntries>(() =>
     isNew
       ? {
@@ -33,7 +42,14 @@ export function useEditorSession(
             scope: "occurrence",
           },
         }
-      : {},
+      : {
+          [task.id]: {
+            original: task,
+            changes: {},
+            isNew: false,
+            scope: "occurrence",
+          },
+        },
   );
   const [pendingTitles, setPendingTitles] = useState<Record<string, string>>(
     {},
@@ -64,7 +80,7 @@ export function useEditorSession(
       ...current,
       [task.id]: {
         ...(current[task.id] ?? {
-          original: task,
+          original: resolveOccurrence(initialState, reference(task)) ?? task,
           isNew: false,
           scope: "occurrence" as const,
         }),
@@ -90,10 +106,77 @@ export function useEditorSession(
     }));
     return task;
   }
+  const expectation = (entry: DraftEntries[string]): DraftExpectation => ({
+    entry,
+    key: draftKey(baselines[entry.original.id] ?? initialState, entry),
+  });
+  const newIds = new Set(
+    Object.values(entries)
+      .filter((e) => e.isNew)
+      .map((e) => e.original.taskId),
+  );
+  const conflicts = Object.values(entries).filter(
+    (entry) =>
+      draftKey(workspace.state, entry) !== expectation(entry).key ||
+      !draftCanApply(workspace.state, entry, newIds),
+  );
+  function review(entry: DraftEntries[string], keep: boolean) {
+    const current = workspace.readEditorState();
+    // A captured review button must not approve remote data it never displayed.
+    if (draftKey(current, entry) !== draftKey(workspace.state, entry)) return;
+    if (keep && !draftCanApply(current, entry, newIds)) return;
+    const live = entry.isNew
+      ? entry.original
+      : resolveOccurrence(current, reference(entry.original));
+    setEntries((previous) => {
+      const next = { ...previous };
+      if (!live || (!keep && entry.isNew)) delete next[entry.original.id];
+      else
+        next[entry.original.id] = {
+          ...entry,
+          original: live,
+          changes: keep ? entry.changes : {},
+        };
+      return next;
+    });
+    setBaselines((previous) => ({ ...previous, [entry.original.id]: current }));
+    setReviewRevision((value) => value + 1);
+    if (!keep)
+      setPendingTitles((previous) => ({
+        ...previous,
+        [entry.original.id]: "",
+      }));
+  }
+  function operate(operation: TaskOperation, message = "Task updated") {
+    if (conflicts.length) return false;
+    const entry = entries[operation.task.id] ?? {
+      original: operation.task,
+      changes: {},
+      isNew: false,
+      scope: "occurrence" as const,
+    };
+    if (
+      !workspace.operateEditor(
+        operation,
+        [...Object.values(entries).map(expectation), expectation(entry)],
+        message,
+      )
+    )
+      return false;
+    const next = workspace.readEditorState();
+    setBaselines((previous) => ({
+      ...previous,
+      ...Object.fromEntries(
+        Object.values(entries).map((e) => [e.original.id, next]),
+      ),
+    }));
+    return true;
+  }
   function complete(target: Occurrence, completed: boolean) {
     const unsaved = !!entries[target.id]?.isNew;
-    if (!unsaved)
-      workspace.operate(
+    if (
+      !unsaved &&
+      !operate(
         {
           kind: "complete",
           task: target,
@@ -101,7 +184,9 @@ export function useEditorSession(
           today: workspace.today,
         },
         completed ? "Task completed" : "Task reopened",
-      );
+      )
+    )
+      return;
     const ids = new Set([target.taskId]);
     if (completed) {
       let more = true;
@@ -145,6 +230,13 @@ export function useEditorSession(
   }
   return {
     ...workspace,
+    operate,
+    conflicts,
+    review,
+    expectation,
+    initialState,
+    baselines,
+    reviewRevision,
     onTaskCreated,
     entries,
     setEntries,
@@ -177,7 +269,27 @@ export function useTaskEditor(
   session: EditorSession,
   nested = false,
 ) {
+  const { initialState, setEntries } = session;
+  useEffect(() => {
+    if (!nested || isNew) return;
+    setEntries((current) =>
+      current[task.id]
+        ? current
+        : {
+            ...current,
+            [task.id]: {
+              original:
+                resolveOccurrence(initialState, reference(task)) ?? task,
+              changes: {},
+              isNew: false,
+              scope: "occurrence",
+            },
+          },
+    );
+  }, [nested, isNew, task, initialState, setEntries]);
   const [snapshot] = useState(() => structuredClone(session.entries));
+  const [snapshotEpoch] = useState(session.adoptionEpoch);
+  const [snapshotReview] = useState(session.reviewRevision);
   const newTitle = session.pendingTitles[task.id] ?? "";
   const setNewTitle = (title: string) =>
     session.setPendingTitles((current) => ({ ...current, [task.id]: title }));
@@ -212,6 +324,11 @@ export function useTaskEditor(
     setError("");
   }
   function submit() {
+    if (session.busy) return;
+    if (session.conflicts.length) {
+      setError("Review the remote changes before saving.");
+      return;
+    }
     let entries = session.entries;
     if (newTitle.trim()) {
       const child = asOccurrence({
@@ -242,11 +359,12 @@ export function useTaskEditor(
       return;
     }
     try {
-      const nextState = commitDrafts(session.state, entries);
-      const saved = session.act(
-        { type: "replace", state: nextState },
+      const saved = session.commitEditorDrafts(
+        entries,
+        Object.values(entries).map(session.expectation),
         isNew ? "Task added" : "Tasks updated",
       );
+      const nextState = session.readEditorState();
       if (saved) {
         if (isNew) session.onTaskCreated(draft, nextState);
         close();
@@ -268,8 +386,13 @@ export function useTaskEditor(
       else session.guard(close);
       return;
     }
-    session.setEntries(snapshot);
-    setNewTitle("");
+    if (
+      snapshotEpoch === session.adoptionEpoch &&
+      snapshotReview === session.reviewRevision
+    ) {
+      session.setEntries(snapshot);
+      setNewTitle("");
+    }
     close();
   }
   function complete(completed: boolean) {
@@ -286,8 +409,11 @@ export function useTaskEditor(
           ? "This removes this occurrence and its occurrence subtree. Other occurrences remain. You can Undo this action."
           : "This removes the selected template subtree, including descendant series and their occurrences. You can Undo this action.",
       action: () => {
-        if (!isNew)
-          session.operate({ kind: "delete", task, scope }, "Task deleted");
+        if (
+          !isNew &&
+          !session.operate({ kind: "delete", task, scope }, "Task deleted")
+        )
+          return;
         const ids = new Set([task.taskId]);
         let more = true;
         while (more) {
@@ -319,10 +445,13 @@ export function useTaskEditor(
       const ownArchived = !!session.state.tasks.find(
         (t) => t.id === task.taskId,
       )?.archived;
-      session.operate(
-        { kind: "archive", task, archived: !ownArchived },
-        ownArchived ? "Task restored" : "Task archived",
-      );
+      if (
+        !session.operate(
+          { kind: "archive", task, archived: !ownArchived },
+          ownArchived ? "Task restored" : "Task archived",
+        )
+      )
+        return;
       session.setEntries({});
       close();
     });
