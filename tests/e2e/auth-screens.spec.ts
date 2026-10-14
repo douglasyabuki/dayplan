@@ -44,12 +44,12 @@ test("Google sign-in preserves the destination, supports retry, and leaves guest
   ).toBeVisible();
   await page.getByRole("button", { name: "Continue with Google" }).click();
   await expect(
-    page.getByRole("alert", { name: "Google sign-in error" }),
+    page.getByRole("alert", { name: "Sign-in error" }),
   ).toContainText("Google sign-in could not start");
   expect(attempts[0]).toMatchObject({
     provider: "google",
     callbackURL: destination,
-    errorCallbackURL: `/sign-in?authError=1&next=${encodeURIComponent(destination)}`,
+    errorCallbackURL: `/sign-in?authError=1&provider=google&next=${encodeURIComponent(destination)}`,
   });
   await page.getByRole("link", { name: "Sign up", exact: true }).click();
   expect(new URL(page.url()).searchParams.get("next")).toBe(destination);
@@ -58,7 +58,7 @@ test("Google sign-in preserves the destination, supports retry, and leaves guest
   ).toBeVisible();
   await page.getByRole("button", { name: "Continue with Google" }).click();
   await expect(
-    page.getByRole("alert", { name: "Google sign-in error" }),
+    page.getByRole("alert", { name: "Sign-in error" }),
   ).toContainText("Google sign-in could not start");
   expect(attempts).toHaveLength(2);
   expect(
@@ -90,27 +90,76 @@ test("OAuth errors allow retry and external return destinations are rejected", a
   });
   await page.goto("/sign-in?authError=1&next=https%3A%2F%2Fexternal.test%2F");
   await expect(
-    page.getByRole("alert", { name: "Google sign-in error" }),
-  ).toContainText("Google sign-in was not completed");
+    page.getByRole("alert", { name: "Sign-in error" }),
+  ).toContainText("Sign-in was not completed");
   await page.getByRole("button", { name: "Continue with Google" }).click();
   await expect(
-    page.getByRole("alert", { name: "Google sign-in error" }),
+    page.getByRole("alert", { name: "Sign-in error" }),
   ).toContainText("Google sign-in could not start");
   expect(body?.callbackURL).toBe("/today");
 });
 
-test("unconfigured Google sign-in shows a recoverable error", async ({
+test("unconfigured providers remain visible and disabled", async ({ page }) => {
+  await page.route("**/api/auth-options", (route) =>
+    route.fulfill({ json: { google: false, github: false } }),
+  );
+  await page.goto("/sign-in");
+  await expect(
+    page.getByRole("button", { name: "Continue with Google" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Continue with GitHub" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText("Google sign-in isn’t available yet."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Explore as a guest" }),
+  ).toBeVisible();
+});
+
+test("GitHub selection preserves the destination and supports availability retry", async ({
+  page,
+}) => {
+  let available = false;
+  await page.route("**/api/auth-options", (route) =>
+    route.fulfill({
+      status: available ? 200 : 503,
+      json: { google: false, github: true },
+    }),
+  );
+  let body: Record<string, string> | undefined;
+  await page.route("**/api/auth/sign-in/social", async (route) => {
+    body = route.request().postDataJSON();
+    await route.fulfill({ status: 503, json: { message: "Unavailable" } });
+  });
+  await page.goto("/sign-up?next=%2Finbox%3Fsort%3Dtitle%23task");
+  await expect(
+    page.getByRole("button", { name: "Retry sign-in options" }),
+  ).toBeVisible();
+  available = true;
+  await page.getByRole("button", { name: "Retry sign-in options" }).click();
+  await expect(
+    page.getByRole("button", { name: "Continue with GitHub" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Continue with GitHub" }).click();
+  await expect(
+    page.getByRole("alert", { name: "Sign-in error" }),
+  ).toContainText("GitHub sign-in could not start");
+  expect(body).toMatchObject({
+    provider: "github",
+    callbackURL: "/inbox?sort=title#task",
+  });
+});
+
+test("unverified-email errors give provider-specific recovery instructions", async ({
   page,
 }) => {
   await page.route("**/api/auth-options", (route) =>
-    route.fulfill({ json: { google: false } }),
+    route.fulfill({ json: { google: true, github: true } }),
   );
-  await page.goto("/sign-in");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
+  await page.goto("/sign-in?provider=github&error=email_not_verified");
   await expect(
-    page.getByRole("alert", { name: "Google sign-in error" }),
-  ).toContainText("Google sign-in is not configured");
-  await expect(
-    page.getByRole("button", { name: "Continue with Google" }),
-  ).toBeEnabled();
+    page.getByRole("alert", { name: "Sign-in error" }),
+  ).toContainText("Verify your email with GitHub");
 });

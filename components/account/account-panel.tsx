@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, KeyRound, UserRoundX } from "lucide-react";
+import { Camera, UserRoundX } from "lucide-react";
 import {
   type Ref,
   useEffect,
@@ -24,8 +24,12 @@ import { useAccount } from "@/stores/account/provider";
 
 import { AccountAvatar } from "./account-avatar";
 import { AuthControls } from "./auth-controls";
+import { ConnectedAccounts } from "./connected-accounts";
 
-export type AccountEditHandle = { commit: () => void; cancel: () => void };
+export type AccountEditHandle = {
+  commit: () => Promise<boolean>;
+  cancel: () => void;
+};
 
 export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
   const {
@@ -45,7 +49,7 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
   const cancelled = useRef(false);
   const active = useRef(false);
   const request = useRef(0);
-  const committing = useRef(false);
+  const committing = useRef<Promise<boolean> | null>(null);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -54,33 +58,36 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
     };
   }, []);
 
-  async function commit() {
-    if (
-      cancelled.current ||
-      !ready ||
-      committing.current ||
-      updateStatus === "pending"
-    )
-      return;
+  async function saveName(): Promise<boolean> {
+    if (cancelled.current || !ready || updateStatus === "pending") return false;
     const name = value.current.trim();
     if (!name) {
       setError(true);
-      return;
+      return false;
     }
     if (name !== lastSaved.current) {
       const id = ++request.current;
-      committing.current = true;
       const success = await updateName(name);
-      committing.current = false;
       if (!active.current || id !== request.current || cancelled.current)
-        return;
-      if (!success) return;
+        return false;
+      if (!success) return false;
       lastSaved.current = name;
       setSaved(true);
     }
     value.current = name;
     setDraft(name);
     setError(false);
+    return true;
+  }
+
+  function commit(): Promise<boolean> {
+    if (committing.current) return committing.current;
+    const promise = saveName();
+    committing.current = promise;
+    void promise.finally(() => {
+      if (committing.current === promise) committing.current = null;
+    });
+    return promise;
   }
 
   function cancel() {
@@ -97,7 +104,7 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <AuthControls authenticated={capabilities.hasAccount} />
+      {!capabilities.hasAccount && <AuthControls />}
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -185,7 +192,7 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
           <FieldDescription>
             {capabilities.hasAccount
               ? "Your account profile."
-              : "Your guest profile and workspace are saved in this browser. Sign in with Google to use an account."}
+              : "Your guest profile and workspace are saved in this browser. Sign in to use an account."}
           </FieldDescription>
         </Field>
       </FieldGroup>
@@ -198,21 +205,14 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
           </AlertDescription>
         </Alert>
       )}
-      <Separator />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium">Password</p>
-          <p className="text-muted-foreground text-sm">
-            {capabilities.hasAccount
-              ? "You sign in with Google; a Dayplan password is not required."
-              : "Sign in with Google to use an account."}
-          </p>
-        </div>
-        <Button variant="outline" disabled>
-          <KeyRound data-icon="inline-start" aria-hidden="true" />
-          Change password
-        </Button>
-      </div>
+      {capabilities.hasAccount && (
+        <>
+          <Separator />
+          <ConnectedAccounts beforeDeparture={commit} />
+          <Separator />
+          <AuthControls authenticated beforeDeparture={commit} />
+        </>
+      )}
       <Separator />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

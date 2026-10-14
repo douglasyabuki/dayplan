@@ -291,7 +291,10 @@ test("guest Account settings migrate only a saved name and preserve save/cancel 
   ).toBeVisible();
   await expect(
     dialog.getByRole("button", { name: "Change password" }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByRole("heading", { name: "Connected accounts" }),
+  ).toHaveCount(0);
   await expect(
     dialog.getByRole("button", { name: "Delete account", exact: true }),
   ).toBeDisabled();

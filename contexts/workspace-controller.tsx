@@ -49,7 +49,9 @@ function useControllerState() {
   });
 
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [settings, setSettings] = useState<SettingsPanel | null>(null);
+  const [settings, setSettings] = useState<SettingsPanel | null>(() =>
+    params.get("settings") === "account" ? "account" : null,
+  );
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
   function openSettings(panel: SettingsPanel, trigger: HTMLElement) {
     settingsReturnFocus.current = trigger;
