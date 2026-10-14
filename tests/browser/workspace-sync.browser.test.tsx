@@ -15,9 +15,8 @@ import {
 } from "@/stores/workspace/account-data-source";
 import { draftKey } from "@/stores/workspace/draft-guard";
 import { useWorkspace, WorkspaceProvider } from "@/stores/workspace/provider";
+import { get, state, task } from "@/tests/task-fixtures";
 import type { Workspace } from "@/types-and-constants/workspace";
-
-import { get, state, task } from "./task-fixtures";
 
 vi.mock("@/contexts/workspace-controller", () => ({
   useWorkspaceController: () => ({

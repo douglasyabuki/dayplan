@@ -1,0 +1,6 @@
+interface:
+  display_name: "Vitest Testing"
+  short_description: "Test and review Dayplan behavior with Vitest 5"
+  default_prompt: "Use $vitest-testing to choose and verify meaningful tests for this Dayplan change."
+policy:
+  allow_implicit_invocation: true

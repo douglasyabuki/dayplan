@@ -181,7 +181,7 @@ test("async reset cannot replace edits made after confirmation", async () => {
   await expect.element(screen.getByTestId("theme")).toHaveTextContent("dark");
   await expect
     .element(screen.getByTestId("operation-error"))
-    .toHaveTextContent("Your edits were kept");
+    .toMatchTextContent("Your edits were kept");
   await expect.poll(() => save.mock.calls.at(-1)?.[0].theme).toBe("dark");
 });
 
@@ -212,7 +212,7 @@ test("failed reset preserves workspace and Undo", async () => {
     .toHaveTextContent("Changed");
   await expect
     .element(screen.getByTestId("storage-error"))
-    .toHaveTextContent("Reset was not saved");
+    .toMatchTextContent("Reset was not saved");
   await screen.getByRole("button", { name: "Undo", exact: true }).click();
   await expect.element(screen.getByTestId("theme")).toHaveTextContent("light");
 });
@@ -327,7 +327,7 @@ test("unsupported account sessions do not read or mount the guest workspace", as
   );
   await expect
     .element(screen.getByRole("alert"))
-    .toHaveTextContent("not available yet");
+    .toMatchTextContent("not available yet");
   expect(reads).not.toHaveBeenCalled();
 });
 

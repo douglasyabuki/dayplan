@@ -54,7 +54,7 @@ for (const kind of ["guest", "account"] as const) {
     await screen.getByLabelText("Backup file").upload(backupFile());
     await expect
       .element(screen.getByRole("dialog"))
-      .toHaveTextContent(
+      .toMatchTextContent(
         kind === "guest" ? "in this browser" : "in your account",
       );
     expect(saved).toBe(initial);
@@ -104,7 +104,7 @@ test("malformed, unsupported, and invalid backups never replace the workspace", 
       .getByLabelText("Backup file")
       .upload(new File([text], "bad.json"));
     await expect
-      .element(screen.getByText("Backup could not be read"))
+      .element(screen.getByText("Backup could not be read", { exact: true }))
       .toBeVisible();
     expect(save.mock.calls.every(([snapshot]) => snapshot === initial)).toBe(
       true,
@@ -152,6 +152,6 @@ test("a delayed failed restore keeps the current workspace and blocks edits duri
     .element(
       screen.getByRole("region", { name: "Your workspace", exact: true }),
     )
-    .toHaveTextContent("Save unavailable");
+    .toMatchTextContent("Save unavailable");
   await expect.element(screen.getByTestId("tasks")).toHaveTextContent("0");
 });
