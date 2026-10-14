@@ -14,15 +14,18 @@
 ## Writing reliable tests
 
 - Assert observable behavior: returned data, persisted changes, visible UI, accessible state, navigation, or recoverable errors. Use role and label locators first; use test IDs for harness outputs or elements without a useful accessible locator.
+- Vitest 5 browser text locators match exactly by default. Use `toHaveTextContent` for the whole expected text and `toMatchTextContent` for a substring or regular expression, including negated substring checks. Use `{ exact: false }` on an individual locator only when partial matching is intended.
 - Await interactions and asynchronous assertions. Use Vitest browser retrying assertions such as `expect.element(...)`, Playwright's locator assertions, or explicit completion signals instead of arbitrary sleeps. Use controlled promises and fake timers where they make races or debounce behavior deterministic, and restore real timers afterward.
 - Mock external boundaries such as auth, network requests, or storage failures while keeping the behavior under test real. Mocked API flows verify the client contract; they do not prove the real server or database works.
 - Clean up state created by a test: restore spies, unstub globals and environment variables, reset timers, remove listeners, and clear browser storage as appropriate. Keep tests independent of execution order, real accounts, and external services.
+- Keep `vi.mock`, `vi.unmock`, and `vi.hoisted` at module scope. Vitest 5 clears mock call history before each test by default, so assertions must not depend on calls recorded in another test or `beforeAll`. Mock implementations remain intact.
 - E2E tests use `tests/e2e/fixtures.ts`, which returns a guest session by default. Account scenarios should register their own session route after that default and provide the API responses they need. Install routes and initial storage before navigation. Avoid shared mutable state because E2E tests run in parallel.
 - When covering a bug, make the assertion fail for the original behavior and pass for the corrected behavior. Include relevant edge cases such as cancellation, stale responses, invalid inputs, or failed persistence when they are part of the change.
 - Do not commit generated screenshots, traces, test results, or coverage output. Remove accidental `test.only`/`describe.only` before finishing.
 
 ## Running and maintaining tests
 
+- Vitest 5 requires Vite 6.4 or newer and a supported Node.js version: `^22.12.0 || ^24.0.0 || >=26.0.0`. Use a compatible runtime locally and in CI; installing compatible Node type declarations does not upgrade the runtime.
 - `npm run test:unit` runs the Node unit suite.
 - `npm run test:browser` runs the Vitest browser suite. It currently uses `--passWithNoTests`, so a successful exit alone does not prove tests were discovered; check the reported file and test counts after changing paths or globs.
 - `npm run test:e2e` runs the Playwright suite and its production build/server setup. It does not reuse an existing server; port 3100 must be available.

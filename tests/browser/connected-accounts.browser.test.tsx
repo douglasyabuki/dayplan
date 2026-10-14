@@ -133,7 +133,7 @@ test("a success parameter without a linked account is not announced as success",
   );
   await expect
     .element(screen.getByRole("alert"))
-    .toHaveTextContent("connection could not be confirmed");
+    .toMatchTextContent("connection could not be confirmed");
 });
 
 test("unverified callback emails provide recovery instructions", async () => {
@@ -147,7 +147,7 @@ test("unverified callback emails provide recovery instructions", async () => {
   );
   await expect
     .element(screen.getByRole("alert"))
-    .toHaveTextContent("Verify your email with GitHub");
+    .toMatchTextContent("Verify your email with GitHub");
   expect(auth.connect).not.toHaveBeenCalled();
 });
 

@@ -97,7 +97,7 @@ test("conflict backup preserves current edits; Cancel keeps them and confirmed r
   await screen.getByRole("button", { name: "Load server version" }).click();
   await expect
     .element(screen.getByRole("dialog"))
-    .toHaveTextContent("discards unsaved local edits");
+    .toMatchTextContent("discards unsaved local edits");
   await screen.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect.element(screen.getByTestId("theme")).toHaveTextContent("dark");
   expect(reads).toBe(1);
@@ -144,7 +144,7 @@ test("changed guest import warns before submission; lost response recovery adopt
   await screen.getByRole("button", { name: "Import guest data" }).click();
   await expect
     .element(screen.getByRole("dialog"))
-    .toHaveTextContent("including items imported before");
+    .toMatchTextContent("including items imported before");
   expect(bodies).toHaveLength(0);
   await screen.getByRole("button", { name: "Confirm import" }).click();
   await expect
@@ -255,7 +255,7 @@ test("dismissed workspace guest decision remains available in Data settings only
   await screen.getByRole("button", { name: "Close", exact: true }).click();
   await expect
     .element(screen.getByTestId("account-settings"))
-    .not.toHaveTextContent("Guest data available");
+    .not.toMatchTextContent("Guest data available");
   await expect
     .element(screen.getByRole("region", { name: "Guest data" }))
     .toBeVisible();
@@ -286,7 +286,7 @@ test("successful import cleans guest workspace and profile, preserves account it
     .click();
   await expect
     .element(screen.getByRole("dialog"))
-    .toHaveTextContent("guest profile name will be deleted from this browser");
+    .toMatchTextContent("guest profile name will be deleted from this browser");
   await screen.getByRole("button", { name: "Confirm import" }).click();
   await expect
     .element(screen.getByTestId("tasks"))
@@ -301,7 +301,7 @@ test("successful import cleans guest workspace and profile, preserves account it
   await screen.getByRole("button", { name: "Data settings" }).click();
   await expect
     .element(screen.getByTestId("data-settings"))
-    .not.toHaveTextContent("Guest data available");
+    .not.toMatchTextContent("Guest data available");
   await screen.unmount();
   const reopened = await render(view);
   await expect
@@ -327,7 +327,7 @@ test("cancelling import or discard and closing startup preserve data; confirmed 
     .click();
   await expect
     .element(screen.getByRole("dialog"))
-    .toHaveTextContent(
+    .toMatchTextContent(
       "Permanently delete the guest workspace and guest profile name from this browser? Your account data will be kept.",
     );
   await screen.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -338,7 +338,7 @@ test("cancelling import or discard and closing startup preserve data; confirmed 
   const reopened = await render(view);
   await expect
     .element(reopened.getByRole("dialog"))
-    .toHaveTextContent("Guest data available");
+    .toMatchTextContent("Guest data available");
   await reopened
     .getByRole("button", { name: "Discard guest data", exact: true })
     .click();
@@ -351,7 +351,7 @@ test("cancelling import or discard and closing startup preserve data; confirmed 
   await reopened.getByRole("button", { name: "Data settings" }).click();
   await expect
     .element(reopened.getByTestId("data-settings"))
-    .not.toHaveTextContent("Guest data available");
+    .not.toMatchTextContent("Guest data available");
   await reopened.unmount();
   const resolved = await render(view);
   await expect
@@ -412,7 +412,7 @@ test("fresh-page receipt recovery removes captured profiles and preserves newer 
   const screen = await render(accountView(userId));
   await expect
     .element(screen.getByRole("dialog"))
-    .toHaveTextContent("Guest data available");
+    .toMatchTextContent("Guest data available");
   expect(readGuestData().snapshot).toEqual(newer);
   expect(localStorage.getItem(GUEST_PROFILE_KEY)).toContain(
     "New guest identity",
@@ -467,16 +467,16 @@ test("Data settings refreshes guest availability on storage events and window fo
   await screen.getByRole("button", { name: "Data settings" }).click();
   await expect
     .element(screen.getByTestId("data-settings"))
-    .not.toHaveTextContent("Guest data available");
+    .not.toMatchTextContent("Guest data available");
   guestFixture();
   window.dispatchEvent(new Event("focus"));
   await expect
     .element(screen.getByTestId("data-settings"))
-    .toHaveTextContent("Guest data available");
+    .toMatchTextContent("Guest data available");
   await screen.getByRole("button", { name: "Close", exact: true }).click();
   localStorage.removeItem(STORAGE_KEY);
   window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
   await expect
     .element(screen.getByTestId("data-settings"))
-    .not.toHaveTextContent("Guest data available");
+    .not.toMatchTextContent("Guest data available");
 });

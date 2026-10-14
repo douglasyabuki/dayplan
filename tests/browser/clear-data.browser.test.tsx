@@ -53,12 +53,12 @@ for (const kind of ["guest", "account"] as const) {
       .click();
     await expect
       .element(screen.getByRole("dialog"))
-      .toHaveTextContent(
+      .toMatchTextContent(
         kind === "account" ? "in your account" : "in this browser",
       );
     await expect
       .element(screen.getByRole("dialog"))
-      .toHaveTextContent("This cannot be undone.");
+      .toMatchTextContent("This cannot be undone.");
     await screen.getByRole("button", { name: "Cancel", exact: true }).click();
     expect(saved).toBe(initial);
     await screen
@@ -105,7 +105,7 @@ for (const kind of ["guest", "account"] as const) {
       .click();
     await expect
       .element(screen.getByRole("dialog"))
-      .toHaveTextContent("This cannot be undone.");
+      .toMatchTextContent("This cannot be undone.");
     await expect
       .element(screen.getByRole("button", { name: "Cancel", exact: true }))
       .toHaveFocus();

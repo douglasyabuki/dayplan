@@ -82,7 +82,7 @@ test("failed and no-op operations preserve the successful Undo snapshot", async 
   await screen.getByRole("button", { name: "Invalid", exact: true }).click();
   await expect
     .element(screen.getByTestId("error"))
-    .toHaveTextContent("Choose a parent");
+    .toMatchTextContent("Choose a parent");
   await expect
     .element(screen.getByTestId("snapshot"))
     .toHaveTextContent(JSON.stringify(moved));

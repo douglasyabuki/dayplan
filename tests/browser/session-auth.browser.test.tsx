@@ -123,7 +123,7 @@ test("account scope closes before sign-out, and a failed sign-out restores the o
   await expect.element(screen.getByText("a:session-a")).toBeVisible();
   await expect
     .element(screen.getByRole("alert"))
-    .toHaveTextContent("Sign-out failed");
+    .toMatchTextContent("Sign-out failed");
 });
 
 test("sign-out runs the navigation callback only after authentication succeeds", async () => {
@@ -216,7 +216,7 @@ test("unprotected work blocks switching, and discarding requires an explicit con
     await screen.getByRole("button", { name: "Switch account" }).click();
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("neither confirmed");
+      .toMatchTextContent("neither confirmed");
     expect(auth.signOut).not.toHaveBeenCalled();
     expect(auth.social).not.toHaveBeenCalled();
     await screen
@@ -353,7 +353,7 @@ for (const method of ["retryDeparture", "discardAndLeave"] as const) {
       await screen.getByRole("button", { name: "Start connection" }).click();
       await expect
         .element(screen.getByRole("alert"))
-        .toHaveTextContent("neither confirmed");
+        .toMatchTextContent("neither confirmed");
       expect(auth.link).not.toHaveBeenCalled();
       await screen.getByRole("button", { name: "Resume connection" }).click();
       await expect.poll(() => auth.link.mock.calls.length).toBe(1);
