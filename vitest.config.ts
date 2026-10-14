@@ -42,7 +42,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: "browser",
-          include: ["**/*.browser.test.tsx"],
+          include: ["tests/browser/**/*.browser.test.tsx"],
 
           browser: {
             enabled: true,
