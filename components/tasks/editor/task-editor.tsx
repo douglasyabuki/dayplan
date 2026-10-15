@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { WorkspaceHistoryControls } from "@/components/workspace/workspace-history-controls";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { compactTiming } from "@/lib/tasks/presentation";
@@ -485,12 +486,8 @@ function TaskEditorPanel({
               </DropdownMenu>
             )}
           </div>
-          <div className="flex gap-2">
-            {session.notice && (
-              <Button type="button" variant="ghost" onClick={session.undo}>
-                Undo
-              </Button>
-            )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <WorkspaceHistoryControls />
             <Button
               type="button"
               variant="outline"

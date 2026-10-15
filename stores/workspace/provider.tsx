@@ -37,6 +37,7 @@ import {
   type DraftExpectation,
 } from "@/stores/workspace/draft-guard";
 import { type GuestData, readGuestData } from "@/stores/workspace/guest-data";
+import { workspaceContent, WorkspaceHistory } from "@/stores/workspace/history";
 import { WorkspacePersistenceSession } from "@/stores/workspace/persistence-session";
 import { reducer } from "@/stores/workspace/reducer";
 import { validateWorkspace } from "@/stores/workspace/validation";
@@ -63,7 +64,10 @@ type Context = {
   recoveryStorageError: string;
   notice: { message: string } | null;
   confirmation: Confirmation | null;
-  undo: () => void;
+  undo: () => boolean;
+  redo: () => boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   dismissNotice: () => void;
   cancelConfirmation: () => void;
   setConfirmationChoice: (value: string) => void;
@@ -133,6 +137,8 @@ export function WorkspaceProvider({
 }) {
   const [state, dispatch] = useReducer(reducer, initial);
   const current = useRef(initial);
+  const history = useRef(new WorkspaceHistory());
+  const [historyGeneration, setHistoryGeneration] = useState(0);
   const [operationError, setOperationError] = useState("");
   const persistence = useRef<WorkspacePersistenceSession | null>(null);
   const revision = useRef(0);
@@ -227,11 +233,72 @@ export function WorkspaceProvider({
   }
   const [notice, setNotice] = useState<{
     message: string;
-    before: Workspace;
-    epoch: number;
+    entryId?: number;
   } | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [today, setToday] = useState("");
+
+  const clearHistory = useCallback(() => {
+    history.current.clear();
+    setHistoryGeneration(history.current.generation);
+    setNotice(null);
+  }, []);
+  const travel = useCallback(
+    (direction: "undo" | "redo", generation: number, entryId?: number) => {
+      if (
+        !persistence.current?.active ||
+        !ready ||
+        editsBlocked() ||
+        generation !== history.current.generation ||
+        (entryId !== undefined && entryId !== history.current.undoId)
+      )
+        return false;
+      const next = history.current[direction](current.current);
+      if (!next) return false;
+      commit(next, true);
+      setOperationError("");
+      setNotice(null);
+      return true;
+    },
+    [ready, editsBlocked, commit],
+  );
+  const undo = useCallback(
+    () => travel("undo", historyGeneration),
+    [travel, historyGeneration],
+  );
+  const redo = useCallback(
+    () => travel("redo", historyGeneration),
+    [travel, historyGeneration],
+  );
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.repeat ||
+        event.altKey ||
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== "z" ||
+        confirmation
+      )
+        return;
+      const typing = event
+        .composedPath()
+        .some(
+          (target) =>
+            target instanceof HTMLElement &&
+            (target.isContentEditable ||
+              target.matches(
+                'input,textarea,select,[role="textbox"],[role="combobox"]',
+              )),
+        );
+      if (typing) return;
+      if ((event.shiftKey ? redo : undo)()) event.preventDefault();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo, redo, confirmation]);
 
   useEffect(() => {
     let loaded = false;
@@ -282,11 +349,13 @@ export function WorkspaceProvider({
     scope.load(
       (restored) => {
         loaded = true;
+        clearHistory();
         commit(restored ?? freshWorkspace());
         setReady(true);
       },
       (cause) => {
         loaded = true;
+        clearHistory();
         skipFailureSnapshot.current = true;
         storageFailure(
           cause instanceof Error
@@ -341,21 +410,16 @@ export function WorkspaceProvider({
       title: notice.message,
       type: "success",
       timeout: 4000,
-      actionProps: {
-        children: "Undo",
-        onClick: () => {
-          if (
-            !persistence.current?.active ||
-            editsBlocked() ||
-            notice.epoch !== epoch.current
-          )
-            return;
-          commit(notice.before, true);
-          setOperationError("");
-          setNotice(null);
-          toast.close(id);
-        },
-      },
+      actionProps:
+        notice.entryId === undefined
+          ? undefined
+          : {
+              children: "Undo",
+              onClick: () => {
+                if (travel("undo", historyGeneration, notice.entryId))
+                  toast.close(id);
+              },
+            },
       onClose: () => {
         if (!persistence.current?.active) return;
         setNotice((currentNotice) =>
@@ -364,7 +428,7 @@ export function WorkspaceProvider({
       },
     });
     return () => toast.close(id);
-  }, [notice, editsBlocked, commit]);
+  }, [notice, travel, historyGeneration]);
   function act(action: Action, message?: string) {
     if (!persistence.current?.active || !ready || editsBlocked()) return false;
     try {
@@ -372,7 +436,11 @@ export function WorkspaceProvider({
       const next = reducer(before, taskAction(before, action));
       setOperationError("");
       if (next === before) return true;
-      if (message) setNotice({ message, before, epoch: epoch.current });
+      const entryId = history.current.record(before, next);
+      if (entryId !== undefined)
+        setNotice(message ? { message, entryId } : null);
+      else if (message && contentKey(before) !== contentKey(next))
+        setNotice({ message });
       commit(next, true);
       return true;
     } catch (cause) {
@@ -434,8 +502,7 @@ export function WorkspaceProvider({
               "Your workspace changed while resetting. Your edits were kept; try reset again.",
             );
           } else {
-            commit(fresh);
-            setNotice(null);
+            adoptRemote(fresh, true);
           }
         });
       },
@@ -469,8 +536,7 @@ export function WorkspaceProvider({
           })
           .then(() => {
             if (!scope.active) return;
-            commit(snapshot);
-            setNotice(null);
+            adoptRemote(snapshot, true);
             setOperationError("");
             toast.add({ title: "Backup restored", type: "success" });
           })
@@ -533,7 +599,7 @@ export function WorkspaceProvider({
         allowPaused,
       );
       if (!scope.active) return false;
-      adoptRemote(snapshot ?? freshWorkspace());
+      adoptRemote(snapshot ?? freshWorkspace(), true);
       setOperationError("");
       setError("");
       setRecoveryCode("");
@@ -568,11 +634,17 @@ export function WorkspaceProvider({
     }
   }
 
-  function adoptRemote(snapshot: Workspace) {
-    if (contentKey(snapshot) === contentKey(current.current)) return;
+  function adoptRemote(snapshot: Workspace, replacement = false) {
+    if (!replacement && contentKey(snapshot) === contentKey(current.current))
+      return;
     epoch.current += 1;
     setAdoptionEpoch(epoch.current);
-    setNotice(null);
+    if (
+      replacement ||
+      contentKey(workspaceContent(snapshot)) !==
+        contentKey(workspaceContent(current.current))
+    )
+      clearHistory();
     setConfirmation(null);
     commit(snapshot);
   }
@@ -797,18 +869,24 @@ export function WorkspaceProvider({
           exclusive((source, signal) => source.retryImport(signal), true),
         notice,
         confirmation,
-        undo: () => {
-          if (
-            !notice ||
-            !persistence.current?.active ||
-            editsBlocked() ||
-            notice.epoch !== epoch.current
-          )
-            return;
-          commit(notice.before, true);
-          setOperationError("");
-          setNotice(null);
-        },
+        undo,
+        redo,
+        canUndo:
+          ready &&
+          !busy &&
+          history.current.canUndo &&
+          !(
+            dataSource instanceof AccountWorkspaceDataSource &&
+            dataSource.hasPendingImport
+          ),
+        canRedo:
+          ready &&
+          !busy &&
+          history.current.canRedo &&
+          !(
+            dataSource instanceof AccountWorkspaceDataSource &&
+            dataSource.hasPendingImport
+          ),
         dismissNotice: () => {
           if (persistence.current?.active) setNotice(null);
         },

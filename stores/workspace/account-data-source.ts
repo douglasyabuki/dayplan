@@ -381,6 +381,14 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
 
   private async persistNow(signal: AbortSignal) {
     const record = this.record();
+    // Construct cancellation under the journal lock from current state, never
+    // from the snapshot captured when staging was queued. Keep latest until
+    // the tombstone has been verified, including when storage fails.
+    const cancelLatest =
+      !!this.latest &&
+      !this.pendingSave &&
+      JSON.stringify(this.latest) === this.saved;
+    if (cancelLatest) record.latest = null;
     try {
       await bounded(signal, Date.now() + 1500, (inner) =>
         writeRecovery(record, this.sequence, inner, () => {
@@ -389,6 +397,13 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
         }),
       );
       this.sequence = record.sequence;
+      if (
+        cancelLatest &&
+        this.generation === record.generation &&
+        !this.pendingSave &&
+        JSON.stringify(this.latest) === this.saved
+      )
+        this.latest = null;
       this.recoveryStorageError = "";
       this.notifyRecovery();
     } catch (error) {
@@ -704,7 +719,10 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   private async saveLocked(signal: AbortSignal): Promise<void> {
     await this.finishSave(signal);
     const snapshot = this.latest;
-    if (!snapshot || JSON.stringify(snapshot) === this.saved) {
+    if (
+      !snapshot ||
+      (JSON.stringify(snapshot) === this.saved && !this.recoveryStorageError)
+    ) {
       this.latest = null;
       return;
     }

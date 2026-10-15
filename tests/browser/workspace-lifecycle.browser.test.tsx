@@ -80,6 +80,21 @@ function Harness({
         Invalid
       </button>
       <button onClick={workspace.undo}>Undo</button>
+      <button
+        onClick={() =>
+          workspace.act(
+            {
+              type: "entity",
+              kind: "projects",
+              entity: { ...workspace.state.projects[0], name: "Edited" },
+            },
+            "Content changed",
+          )
+        }
+      >
+        Edit content
+      </button>
+      <p data-testid="project">{workspace.state.projects[0]?.name ?? "None"}</p>
       <button onClick={workspace.reset}>Reset</button>
       <button onClick={workspace.acceptConfirmation}>Confirm</button>
     </>
@@ -203,18 +218,24 @@ test("failed reset preserves workspace and Undo", async () => {
       <Harness />
     </WorkspaceProvider>,
   );
-  await screen.getByRole("button", { name: "Dark", exact: true }).click();
+  await screen
+    .getByRole("button", { name: "Edit content", exact: true })
+    .click();
   await screen.getByRole("button", { name: "Reset", exact: true }).click();
   await screen.getByRole("button", { name: "Confirm", exact: true }).click();
-  await expect.element(screen.getByTestId("theme")).toHaveTextContent("dark");
+  await expect
+    .element(screen.getByTestId("project"))
+    .toHaveTextContent("Edited");
   await expect
     .element(screen.getByTestId("notice"))
-    .toHaveTextContent("Changed");
+    .toHaveTextContent("Content changed");
   await expect
     .element(screen.getByTestId("storage-error"))
     .toMatchTextContent("Reset was not saved");
   await screen.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect.element(screen.getByTestId("theme")).toHaveTextContent("light");
+  await expect
+    .element(screen.getByTestId("project"))
+    .toHaveTextContent("Studio");
 });
 
 test("Strict Mode cancels its abandoned load without persisting an initial placeholder", async () => {
@@ -287,10 +308,14 @@ test("owner changes clear drafts, confirmations, errors and Undo; stale actions 
   await screen
     .getByRole("textbox", { name: "Workspace draft" })
     .fill("Unsaved task");
+  await screen
+    .getByRole("button", { name: "Edit content", exact: true })
+    .click();
   await screen.getByRole("button", { name: "Dark", exact: true }).click();
   await screen.getByRole("button", { name: "Invalid", exact: true }).click();
   await screen.getByRole("button", { name: "Reset", exact: true }).click();
   const old = retained;
+  expect(old.canUndo).toBe(true);
   await screen.rerender(view({ status: "authenticated", userId: "a" }));
   await expect.element(screen.getByText("Loading workspace")).toBeVisible();
   expect(old.act({ type: "theme", theme: "dark" })).toBe(false);
@@ -298,6 +323,8 @@ test("owner changes clear drafts, confirmations, errors and Undo; stale actions 
   old.acceptConfirmation();
   await screen.rerender(view({ status: "authenticated", userId: "b" }));
   await expect.element(screen.getByTestId("theme")).toHaveTextContent("system");
+  expect(retained.canUndo).toBe(false);
+  expect(retained.canRedo).toBe(false);
   await expect
     .element(screen.getByRole("textbox", { name: "Workspace draft" }))
     .toHaveValue("");

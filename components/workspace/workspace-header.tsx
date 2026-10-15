@@ -15,6 +15,8 @@ import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { formatDate } from "@/lib/dates";
 import { isAggregateView } from "@/lib/workspace/grouping";
 
+import { WorkspaceHistoryControls } from "./workspace-history-controls";
+
 export function WorkspaceHeader() {
   const {
     title,
@@ -51,6 +53,7 @@ export function WorkspaceHeader() {
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <WorkspaceHistoryControls />
           {hasLayout && (
             <ToggleGroup
               aria-label="Task view"

@@ -77,6 +77,7 @@ import { priorities } from "@/types-and-constants/tasks";
 import { WorkspaceContentLoading } from "./workspace-content-loading";
 import { WorkspaceFooter } from "./workspace-footer";
 import { WorkspaceHeader } from "./workspace-header";
+import { WorkspaceHistoryControls } from "./workspace-history-controls";
 import { WorkspaceSearchInput } from "./workspace-search-input";
 
 const sortOptions: {
@@ -226,7 +227,7 @@ export function WorkspaceView({
       {compact ? (
         <WorkspaceHeader />
       ) : (
-        <div className="mb-7 flex shrink-0 items-center justify-between gap-4 [&>button]:shrink-0 [&>div]:min-w-0">
+        <div className="mb-7 flex shrink-0 flex-wrap items-center justify-between gap-4 [&>div]:min-w-0">
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-semibold tracking-tight wrap-anywhere max-md:text-[26px]">
@@ -239,19 +240,22 @@ export function WorkspaceView({
                 : description}
             </p>
           </div>
-          <Button
-            size="lg"
-            onClick={() =>
-              collection
-                ? setEntity({ kind: view as "projects" | "tags" })
-                : create()
-            }
-          >
-            <Plus data-icon="inline-start" />
-            {collection
-              ? `New ${view === "projects" ? "project" : "tag"}`
-              : "Add task"}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <WorkspaceHistoryControls />
+            <Button
+              size="lg"
+              onClick={() =>
+                collection
+                  ? setEntity({ kind: view as "projects" | "tags" })
+                  : create()
+              }
+            >
+              <Plus data-icon="inline-start" />
+              {collection
+                ? `New ${view === "projects" ? "project" : "tag"}`
+                : "Add task"}
+            </Button>
+          </div>
         </div>
       )}
       {collection ? (

@@ -68,13 +68,15 @@ export class WorkspacePersistenceSession {
 
   saveLatest(snapshot: Workspace) {
     if (!this.active) return;
-    if (this.source.isSaved?.(snapshot) && !this.source.immediateSaving) return;
     // Journal edits even while a network/conflict error has paused sending.
     if (this.source.stage) {
       const staged = this.source.stage(snapshot, this.controller.signal);
       this.staging = staged;
       void staged.then(
-        () => this.schedule(),
+        () => {
+          if (this.staging !== staged) return;
+          if (!this.cancelSaved(snapshot)) this.schedule();
+        },
         (cause) => {
           if (this.active) {
             this.writable = false;
@@ -86,9 +88,31 @@ export class WorkspacePersistenceSession {
     }
     if (this.pending === snapshot) return;
     this.pending = snapshot;
+    if (!this.source.stage && this.cancelSaved(snapshot)) return;
     if (this.firstEditAt === null) this.firstEditAt = Date.now();
     this.lastEditAt = Date.now();
     this.schedule();
+  }
+
+  private cancelSaved(snapshot: Workspace): boolean {
+    // Staged data must be durable first. In-flight writes still need a
+    // follow-up snapshot, since they may replace the confirmed baseline.
+    if (
+      this.active &&
+      this.pending === snapshot &&
+      this.source.isSaved?.(snapshot) &&
+      !this.source.immediateSaving &&
+      !this.saving &&
+      !this.resetting &&
+      !this.flushing
+    ) {
+      this.pending = null;
+      this.firstEditAt = null;
+      this.cancelTimer();
+      this.onChange();
+      return true;
+    }
+    return false;
   }
 
   private cancelTimer() {

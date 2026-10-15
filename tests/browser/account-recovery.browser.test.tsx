@@ -10,6 +10,7 @@ import {
   bounded,
   CoordinationError,
 } from "@/stores/workspace/coordination";
+import { WorkspacePersistenceSession } from "@/stores/workspace/persistence-session";
 import {
   listRecovery,
   readRecovery,
@@ -18,7 +19,233 @@ import {
 } from "@/stores/workspace/recovery-journal";
 import type { Workspace } from "@/types-and-constants/workspace";
 
-afterEach(() => vi.restoreAllMocks());
+const sessions: WorkspacePersistenceSession[] = [];
+
+afterEach(() => {
+  sessions.splice(0).forEach((scope) => scope.close());
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+async function persistenceHarness() {
+  const remote = server();
+  const source = new AccountWorkspaceDataSource(remote.connection);
+  const onError = vi.fn();
+  const scope = new WorkspacePersistenceSession(source, onError);
+  sessions.push(scope);
+  const baseline = await new Promise<Workspace | null>((resolve, reject) =>
+    scope.load(resolve, reject),
+  );
+  const signal = new AbortController().signal;
+  const edit = {
+    ...baseline!,
+    tags: [
+      { id: "edit", name: "Edited", color: "sky", parentId: null, order: 0 },
+    ],
+  } satisfies Workspace;
+  return { remote, source, scope, signal, baseline: baseline!, edit, onError };
+}
+
+test("real account staging cancels queued undo only after durable recovery cleanup", async () => {
+  const { remote, source, scope, signal, baseline, edit } =
+    await persistenceHarness();
+  vi.useFakeTimers();
+  scope.saveLatest(edit);
+  await source.stage(edit, signal);
+  scope.saveLatest(baseline);
+  expect(scope.status.pending).toBe(true);
+  await source.stage(baseline, signal);
+  await expect.poll(() => scope.status.pending).toBe(false);
+  expect(source.isSaved(baseline)).toBe(true);
+  expect(await listRecovery(remote.connection.owner.userId, signal)).toEqual(
+    [],
+  );
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(remote.bodies).toEqual([]);
+  scope.close();
+  vi.useRealTimers();
+  const reopened = new AccountWorkspaceDataSource(remote.connection);
+  expect(await reopened.load(signal)).toEqual(baseline);
+  expect(remote.bodies).toEqual([]);
+});
+
+test("delayed cancellation cannot erase a newer edit from recovery or reopening", async () => {
+  const { remote, source, scope, signal, baseline, edit } =
+    await persistenceHarness();
+  scope.saveLatest(edit);
+  await source.stage(edit, signal);
+  const [record] = await listRecovery(remote.connection.owner.userId, signal);
+  let release!: () => void;
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const held = navigator.locks.request(
+    `dayplan:journal:${record.userId}:${record.writerId}`,
+    async () => {
+      started();
+      await gate;
+    },
+  );
+  await ready;
+  const newer = { ...edit, tags: [{ ...edit.tags[0], name: "Newer" }] };
+  try {
+    scope.saveLatest(baseline);
+    scope.saveLatest(newer);
+  } finally {
+    release();
+  }
+  await held;
+  await source.stage(newer, signal);
+  expect(scope.status.pending).toBe(true);
+  expect(source.recoverySnapshot).toEqual(newer);
+  expect((await listRecovery(record.userId, signal))[0].latest).toEqual(newer);
+  scope.close();
+  const reopened = new AccountWorkspaceDataSource(remote.connection);
+  expect(await reopened.load(signal)).toEqual(newer);
+  expect(reopened.recoverySnapshot).toEqual(newer);
+  expect(await listRecovery(record.userId, signal)).toEqual([]);
+  expect(JSON.parse(remote.bodies.at(-1)!)).toMatchObject({ snapshot: newer });
+});
+
+test("an edit arriving during the tombstone transaction survives its late completion", async () => {
+  const { remote, source, scope, signal, baseline, edit } =
+    await persistenceHarness();
+  scope.saveLatest(edit);
+  await source.stage(edit, signal);
+  const newer = { ...edit, tags: [{ ...edit.tags[0], name: "During commit" }] };
+  const transaction = IDBDatabase.prototype.transaction;
+  let intervened = false;
+  const spy = vi
+    .spyOn(IDBDatabase.prototype, "transaction")
+    .mockImplementation(function (this: IDBDatabase, names, mode, options) {
+      if (mode === "readwrite" && !intervened) {
+        intervened = true;
+        // persistNow already constructed the cancellation record, but its
+        // transaction has not committed. This must also guard memory cleanup.
+        scope.saveLatest(newer);
+      }
+      return transaction.call(this, names, mode, options);
+    });
+  scope.saveLatest(baseline);
+  const cancellation = source.stage(baseline, signal);
+  await cancellation;
+  expect(intervened).toBe(true);
+  expect(scope.status.pending).toBe(true);
+  expect(source.recoverySnapshot).toEqual(newer);
+  await source.stage(newer, signal);
+  spy.mockRestore();
+  const [record] = await listRecovery(remote.connection.owner.userId, signal);
+  expect(record.latest).toEqual(newer);
+  scope.close();
+  expect(
+    await new AccountWorkspaceDataSource(remote.connection).load(signal),
+  ).toEqual(newer);
+});
+
+test("failed cancellation retains the restored snapshot and retryable immediate-save fallback", async () => {
+  const { remote, source, scope, signal, baseline, edit, onError } =
+    await persistenceHarness();
+  scope.saveLatest(edit);
+  await source.stage(edit, signal);
+  const broken = vi
+    .spyOn(IDBFactory.prototype, "open")
+    .mockImplementation(() => {
+      throw new Error("Quota");
+    });
+  const request = remote.connection.request;
+  remote.connection.request = async <T,>(
+    path: string,
+    inner: AbortSignal,
+    body?: unknown,
+  ): Promise<T> => {
+    if (body) throw new PersistenceError("network_error", "Offline");
+    return request<T>(path, inner, body);
+  };
+  scope.saveLatest(baseline);
+  await source.stage(baseline, signal);
+  await expect.poll(() => onError.mock.calls.length).toBeGreaterThan(0);
+  expect(source.immediateSaving).toBe(true);
+  expect(source.recoveryStorageError).not.toBe("");
+  expect(source.isSaved(baseline)).toBe(false);
+  expect(source.recoverySnapshot).toEqual(baseline);
+  broken.mockRestore();
+  const [record] = await listRecovery(remote.connection.owner.userId, signal);
+  expect(record.latest).toEqual(edit);
+  remote.connection.request = request;
+  await new Promise<void>((resolve) => scope.retry(baseline, resolve));
+  expect(source.isSaved(baseline)).toBe(true);
+  expect(source.recoveryStorageError).toBe("");
+  expect(await listRecovery(record.userId, signal)).toEqual([]);
+});
+
+test.each([false, true])(
+  "undo follows an older write with the baseline (lost response: %s)",
+  async (loseResponse) => {
+    const { remote, source, scope, signal, baseline, edit } =
+      await persistenceHarness();
+    let release!: () => void;
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const request = remote.connection.request;
+    let first = true;
+    remote.connection.request = async <T,>(
+      path: string,
+      inner: AbortSignal,
+      body?: unknown,
+    ): Promise<T> => {
+      if (body && first) {
+        first = false;
+        started();
+        await gate;
+      }
+      return request<T>(path, inner, body);
+    };
+    scope.saveLatest(edit);
+    await source.stage(edit, signal);
+    if (loseResponse) remote.lose();
+    const sending = scope.flush(Date.now() + 2000);
+    const outcome = sending.catch((error: unknown) => error);
+    await ready;
+    try {
+      scope.saveLatest(baseline);
+      await source.stage(baseline, signal);
+      expect(source.isSaved(baseline)).toBe(false);
+      expect(scope.status.pending).toBe(true);
+      const [record] = await listRecovery(
+        remote.connection.owner.userId,
+        signal,
+      );
+      expect(record.latest).toEqual(baseline);
+      expect(record.operation?.snapshot).toEqual(edit);
+    } finally {
+      release();
+    }
+    await outcome;
+    await scope.flush(Date.now() + 2000);
+    const bodies = remote.bodies.map((body) => JSON.parse(body));
+    expect(bodies[0]).toMatchObject({ snapshot: edit, expectedRevision: 1 });
+    if (loseResponse) expect(bodies[1]).toEqual(bodies[0]);
+    expect(bodies.at(-1)).toMatchObject({
+      snapshot: baseline,
+      expectedRevision: 2,
+    });
+    expect(source.isSaved(baseline)).toBe(true);
+    expect(scope.status).toEqual({ pending: false, saving: false });
+    scope.close();
+    expect(
+      await new AccountWorkspaceDataSource(remote.connection).load(signal),
+    ).toEqual(baseline);
+  },
+);
 
 function server(userId = crypto.randomUUID()) {
   let snapshot = emptyWorkspace();

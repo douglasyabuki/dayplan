@@ -5,6 +5,7 @@ import { render } from "vitest-browser-react";
 
 import { DraftReview } from "@/components/tasks/editor/draft-review";
 import { useEditorSession } from "@/components/tasks/editor/use-task-editor";
+import { toast } from "@/components/ui/toast";
 import { WorkspaceSyncControl } from "@/components/workspace/workspace-sync-control";
 import { useWorkspaceTaskEditor } from "@/hooks/workspace/use-workspace-task-editor";
 import type { DraftEntries } from "@/lib/tasks/editor";
@@ -85,15 +86,160 @@ test("identical refresh retains Undo; later local actions undo against adopted d
     .element(screen.getByRole("button", { name: "Workspace sync: Saved" }))
     .toBeVisible();
   expect(exposed.adoptionEpoch).toBe(0);
+  expect(exposed.canUndo).toBe(true);
   expect(exposed.notice).not.toBeNull();
   remote.edit({ ...exposed.state, theme: "light" });
   await screen.getByRole("button", { name: "Run sync" }).click();
   await expect.element(screen.getByTestId("theme")).toHaveTextContent("light");
-  expect(exposed.notice).toBeNull();
+  await expect
+    .element(screen.getByRole("button", { name: "Workspace sync: Saved" }))
+    .toBeVisible();
+  expect(exposed.notice).not.toBeNull();
+  await expect.poll(() => exposed.canUndo).toBe(true);
+  expect(exposed.canRedo).toBe(false);
   await screen.getByRole("button", { name: "Edit workspace" }).click();
   await screen.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect.element(screen.getByTestId("theme")).toHaveTextContent("light");
+  await expect.element(screen.getByTestId("theme")).toHaveTextContent("dark");
+  expect(exposed.state.projects[0].name).toBe("Edited");
 });
+
+test.each(["undo", "redo"] as const)(
+  "appearance sync preserves both stacks and the captured %s callback",
+  async (direction) => {
+    const remote = server();
+    const screen = await render(
+      <WorkspaceProvider dataSource={remote.source}>
+        <Harness />
+      </WorkspaceProvider>,
+    );
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Undo", exact: true }).click();
+    expect(exposed.canUndo).toBe(true);
+    expect(exposed.canRedo).toBe(true);
+    const travel = exposed[direction];
+    await exposed.syncNow();
+    const epoch = exposed.adoptionEpoch;
+    const appearance = {
+      theme: "light" as const,
+      timezone: "Pacific/Auckland",
+      layouts: { inbox: "board" as const },
+    };
+    remote.edit({ ...exposed.state, ...appearance });
+    expect(await exposed.syncNow()).toBe(true);
+    await expect.poll(() => exposed.adoptionEpoch).toBe(epoch + 1);
+    expect(exposed.canUndo).toBe(true);
+    expect(exposed.canRedo).toBe(true);
+    expect(travel()).toBe(true);
+    expect(exposed.readEditorState()).toMatchObject({
+      ...appearance,
+      projects: [{ id: "p", name: "Project" }],
+    });
+  },
+);
+
+test("appearance sync retains the toast Undo for its associated operation", async () => {
+  const add = vi.spyOn(toast, "add");
+  const remote = server();
+  const screen = await render(
+    <WorkspaceProvider dataSource={remote.source}>
+      <Harness />
+    </WorkspaceProvider>,
+  );
+  await screen.getByRole("button", { name: "Edit workspace" }).click();
+  const notice = exposed.notice;
+  await exposed.syncNow();
+  remote.edit({ ...exposed.state, theme: "light" });
+  expect(await exposed.syncNow()).toBe(true);
+  await expect.poll(() => exposed.state.theme).toBe("light");
+  expect(exposed.notice).toBe(notice);
+  const action = add.mock.calls.at(-1)![0].actionProps!;
+  const button = document.createElement("button");
+  button.onclick = (event) =>
+    action.onClick?.(
+      event as unknown as Parameters<NonNullable<typeof action.onClick>>[0],
+    );
+  button.click();
+  expect(exposed.readEditorState().projects[0].name).toBe("Project");
+  expect(exposed.readEditorState().theme).toBe("light");
+});
+
+test.each(["tasks", "projects", "tags", "sections", "exceptions"] as const)(
+  "remote %s changes invalidate both stacks and captured callbacks",
+  async (kind) => {
+    const remote = server();
+    const screen = await render(
+      <WorkspaceProvider dataSource={remote.source}>
+        <Harness />
+      </WorkspaceProvider>,
+    );
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Undo", exact: true }).click();
+    const undo = exposed.undo;
+    const redo = exposed.redo;
+    await exposed.syncNow();
+    const next = structuredClone(exposed.state);
+    if (kind === "tasks") next.tasks[0].title = "Remote";
+    if (kind === "projects") next.projects[0].name = "Remote";
+    if (kind === "tags")
+      next.tags = [
+        {
+          id: "remote",
+          name: "Remote",
+          color: "sky",
+          parentId: null,
+          order: 0,
+        },
+      ];
+    if (kind === "sections") next.sections[0].name = "Remote";
+    if (kind === "exceptions")
+      next.exceptions = {
+        '["a"]': { taskId: "a", overrides: { title: "Remote" } },
+      };
+    remote.edit(next);
+    expect(await exposed.syncNow()).toBe(true);
+    await expect.poll(() => exposed.canUndo).toBe(false);
+    expect(exposed.canRedo).toBe(false);
+    expect(exposed.notice).toBeNull();
+    // Repopulate history so generation invalidation, rather than an empty
+    // cursor, is what rejects the retained callbacks.
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Undo", exact: true }).click();
+    expect(undo()).toBe(false);
+    expect(redo()).toBe(false);
+  },
+);
+
+test.each(["restore", "reload"] as const)(
+  "identical explicit %s invalidates both directions",
+  async (operation) => {
+    const remote = server();
+    const screen = await render(
+      <WorkspaceProvider dataSource={remote.source}>
+        <Harness />
+      </WorkspaceProvider>,
+    );
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Undo", exact: true }).click();
+    await exposed.syncNow();
+    const undo = exposed.undo;
+    const redo = exposed.redo;
+    if (operation === "restore") exposed.restoreBackup(exposed.state);
+    else exposed.reloadSaved();
+    await expect.poll(() => exposed.confirmation).not.toBeNull();
+    exposed.acceptConfirmation();
+    await expect.poll(() => exposed.canUndo).toBe(false);
+    expect(exposed.canRedo).toBe(false);
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Edit workspace" }).click();
+    await screen.getByRole("button", { name: "Undo", exact: true }).click();
+    expect(undo()).toBe(false);
+    expect(redo()).toBe(false);
+  },
+);
 
 test("offline disables sync and conflicts require attention", async () => {
   const remote = server();
@@ -282,7 +428,26 @@ function Harness() {
       <p data-testid="theme">{workspace.state.theme}</p>
       <button
         onClick={() =>
-          workspace.act({ type: "theme", theme: "dark" }, "Theme changed")
+          workspace.act(
+            {
+              type: "batch",
+              actions: [
+                { type: "theme", theme: "dark" },
+                {
+                  type: "entity",
+                  kind: "projects",
+                  entity: {
+                    ...workspace.state.projects[0],
+                    name:
+                      workspace.state.projects[0].name === "Edited"
+                        ? "Project"
+                        : "Edited",
+                  },
+                },
+              ],
+            },
+            "Workspace changed",
+          )
         }
       >
         Edit workspace
@@ -356,6 +521,8 @@ test("manual sync flushes first, pauses mutations, rejects duplicate clicks, and
     .element(screen.getByRole("button", { name: "Workspace sync: Saving" }))
     .toBeVisible();
   expect(exposed.act({ type: "theme", theme: "light" })).toBe(false);
+  expect(exposed.undo()).toBe(false);
+  expect(exposed.canUndo).toBe(false);
   expect(await exposed.syncNow()).toBe(false);
   remote.pause(null);
   finish();
@@ -364,6 +531,44 @@ test("manual sync flushes first, pauses mutations, rejects duplicate clicks, and
     .toBeVisible();
   expect(remote.calls.slice(-2)).toEqual(["save", "read"]);
   expect(exposed.state.theme).toBe("dark");
+});
+
+test("undo preserves an open draft and requires review before overwriting changed content", async () => {
+  const remote = server();
+  const screen = await render(
+    <WorkspaceProvider dataSource={remote.source}>
+      <Harness />
+    </WorkspaceProvider>,
+  );
+  await expect
+    .element(screen.getByRole("button", { name: "Edit workspace" }))
+    .toBeVisible();
+  exposed.save(
+    { ...get(exposed.state, "a"), description: "Saved description" },
+    "Edited task",
+  );
+  await expect
+    .poll(() => exposed.state.tasks[0].description)
+    .toBe("Saved description");
+  const baseline = exposed.state;
+  await screen.rerender(
+    <WorkspaceProvider dataSource={remote.source}>
+      <Harness />
+      <DraftHarness initial={baseline} />
+    </WorkspaceProvider>,
+  );
+  await screen.getByRole("button", { name: "Draft title" }).click();
+  await screen.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect
+    .element(screen.getByRole("button", { name: "Save draft" }))
+    .toBeDisabled();
+  expect(document.body.textContent).toContain("My draft");
+  expect(exposed.readEditorState().tasks[0].description).toBe("");
+  await screen.getByRole("button", { name: "Keep draft changes" }).click();
+  await screen.getByRole("button", { name: "Save draft" }).click();
+  await expect.poll(() => exposed.state.tasks[0].title).toBe("My draft");
+  expect(exposed.state.tasks[0].description).toBe("");
+  expect(exposed.canRedo).toBe(false);
 });
 
 test("failed saves prevent retrieval; retry succeeds and malformed refresh preserves local data", async () => {
@@ -380,6 +585,7 @@ test("failed saves prevent retrieval; retry succeeds and malformed refresh prese
     .element(screen.getByRole("button", { name: "Workspace sync: Offline" }))
     .toBeVisible();
   expect(remote.calls.filter((c) => c === "read")).toHaveLength(1);
+  await expect.poll(() => exposed.canUndo).toBe(true);
   remote.fail("");
   await screen.getByRole("button", { name: "Run sync" }).click();
   await expect
@@ -394,6 +600,7 @@ test("failed saves prevent retrieval; retry succeeds and malformed refresh prese
     .toBeVisible();
   expect(exposed.state.theme).toBe("dark");
   expect(exposed.state.tasks).toHaveLength(2);
+  await expect.poll(() => exposed.canUndo).toBe(true);
 });
 
 test("different adoption invalidates captured Undo and stale provider draft submission", async () => {

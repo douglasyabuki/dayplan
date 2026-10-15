@@ -97,6 +97,22 @@ for (const board of [false, true]) {
         ),
       )
       .toBe("project-0");
+    const history = page.getByRole("group", { name: "Edit history" });
+    await history.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(page.locator("[data-task-item]").first()).toBeVisible();
+    await expect(
+      history.getByRole("button", { name: "Undo", exact: true }),
+    ).toBeDisabled();
+    await history.getByRole("button", { name: "Redo", exact: true }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("dayplan.workspace.v2")!).tasks[0]
+              .projectId,
+        ),
+      )
+      .toBe("project-0");
   });
 }
 

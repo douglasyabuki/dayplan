@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 
 import { emptyWorkspace } from "@/lib/workspace/empty";
+import type { WorkspaceDataSource } from "@/stores/workspace/data-source";
 import { WorkspacePersistenceSession } from "@/stores/workspace/persistence-session";
 
 afterEach(() => vi.useRealTimers());
@@ -107,4 +108,40 @@ test("storage failure switches to immediate serialized saves and cleanup cancels
   const calls = save.mock.calls.length;
   await vi.advanceTimersByTimeAsync(60000);
   expect(save).toHaveBeenCalledTimes(calls);
+});
+
+test("undo during an in-flight save follows it with the restored snapshot", async () => {
+  vi.useFakeTimers();
+  const original = emptyWorkspace();
+  let finish!: () => void;
+  const save = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValue(undefined);
+  const source: WorkspaceDataSource = {
+    owner: { kind: "account", userId: "undo" },
+    load: () => original,
+    save,
+    stage: vi.fn().mockResolvedValue(undefined),
+    isSaved: (snapshot) => snapshot === original,
+  };
+  const scope = new WorkspacePersistenceSession(source, vi.fn());
+  scope.load(vi.fn(), vi.fn());
+  const edit = { ...original, theme: "dark" as const };
+  scope.saveLatest(edit);
+  await vi.advanceTimersByTimeAsync(10000);
+  scope.saveLatest(original);
+  await vi.advanceTimersByTimeAsync(10000);
+  finish();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(save.mock.calls.map(([snapshot]) => snapshot)).toEqual([
+    edit,
+    original,
+  ]);
+  scope.close();
 });
