@@ -87,6 +87,7 @@ type Context = {
   syncStatus: "Saved" | "Pending" | "Saving" | "Offline" | "Needs attention";
   syncAvailable: boolean;
   syncNow: () => Promise<boolean>;
+  holdRemoteRefresh: () => () => void;
   adoptionEpoch: number;
   readEditorState: () => Workspace;
   commitEditorDrafts: (
@@ -146,6 +147,20 @@ export function WorkspaceProvider({
   const [adoptionEpoch, setAdoptionEpoch] = useState(0);
   const [activity, setActivity] = useState({ pending: false, saving: false });
   const [online, setOnline] = useState(true);
+  const remoteFlight = useRef(false);
+  const [remoteRefreshing, setRemoteRefreshing] = useState(false);
+  const lastRemoteCheck = useRef(Date.now());
+  const refreshHolds = useRef(0);
+  const refreshGeneration = useRef(0);
+  const [remoteOffline, setRemoteOffline] = useState(false);
+  const holdRemoteRefresh = useCallback(() => {
+    refreshHolds.current += 1;
+    refreshGeneration.current += 1;
+    return () => {
+      refreshHolds.current -= 1;
+      refreshGeneration.current += 1;
+    };
+  }, []);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     update();
@@ -656,19 +671,103 @@ export function WorkspaceProvider({
     (!!error && recoveryCode !== "network_error");
   const syncStatus: Context["syncStatus"] = blockingSync
     ? "Needs attention"
-    : !online || recoveryCode === "network_error"
+    : !online || remoteOffline || recoveryCode === "network_error"
       ? "Offline"
       : busy || activity.saving
         ? "Saving"
         : activity.pending
           ? "Pending"
           : "Saved";
-  const syncAvailable = ready && database && online && !busy && !blockingSync;
+  const syncAvailable =
+    ready && database && online && !busy && !remoteRefreshing && !blockingSync;
+
+  useEffect(() => {
+    if (!(dataSource instanceof AccountWorkspaceDataSource)) return;
+    const scope = persistence.current;
+    const safe = () =>
+      !!scope?.active &&
+      scope === persistence.current &&
+      scope.writable &&
+      ready &&
+      !error &&
+      !recoveryStorageError &&
+      !busyRef.current &&
+      !confirmation &&
+      !refreshHolds.current &&
+      !history.current.canUndo &&
+      !history.current.canRedo &&
+      !scope.status.pending &&
+      !scope.status.saving &&
+      !dataSource.hasPendingImport &&
+      dataSource.isSaved(current.current) &&
+      navigator.onLine &&
+      document.visibilityState === "visible";
+    let canceled = false;
+    const refresh = async () => {
+      if (
+        remoteFlight.current ||
+        Date.now() - lastRemoteCheck.current < 30000 ||
+        !safe()
+      )
+        return;
+      remoteFlight.current = true;
+      setRemoteRefreshing(true);
+      const before = revision.current;
+      const generation = refreshGeneration.current;
+      const canAdopt = () =>
+        !canceled &&
+        safe() &&
+        revision.current === before &&
+        refreshGeneration.current === generation;
+      try {
+        await scope!.inspect(
+          (signal) =>
+            dataSource.refresh(signal, canAdopt, (snapshot) => {
+              adoptRemote(snapshot ?? freshWorkspace());
+              setRemoteOffline(false);
+            }),
+          Date.now() + 10000,
+        );
+      } catch (cause) {
+        if (canceled || !scope?.active) return;
+        const code =
+          cause && typeof cause === "object" && "code" in cause
+            ? cause.code
+            : undefined;
+        if (code === "sync_pending") return;
+        if (code === "network_error") setRemoteOffline(true);
+        else
+          storageFailure(
+            "Remote refresh needs attention. Your local work has been kept.",
+            cause,
+          );
+      } finally {
+        lastRemoteCheck.current = Date.now();
+        remoteFlight.current = false;
+        if (scope?.active) setRemoteRefreshing(false);
+      }
+    };
+    const check = () => {
+      void refresh();
+    };
+    window.addEventListener("focus", check);
+    window.addEventListener("online", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      canceled = true;
+      window.removeEventListener("focus", check);
+      window.removeEventListener("online", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+    // Adoption is guarded by this effect's lifetime and synchronous edit counters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataSource, ready, error, recoveryStorageError, confirmation]);
 
   async function syncNow(): Promise<boolean> {
     const scope = persistence.current;
     if (
       !scope?.active ||
+      remoteFlight.current ||
       busyRef.current ||
       !ready ||
       !navigator.onLine ||
@@ -691,6 +790,7 @@ export function WorkspaceProvider({
       setError("");
       setRecoveryCode("");
       setOperationError("");
+      setRemoteOffline(false);
       scope.resume();
       return true;
     } catch (cause) {
@@ -701,6 +801,7 @@ export function WorkspaceProvider({
         );
       return false;
     } finally {
+      lastRemoteCheck.current = Date.now();
       if (scope.active) {
         busyRef.current = false;
         setBusy(false);
@@ -781,6 +882,7 @@ export function WorkspaceProvider({
         syncStatus,
         syncAvailable,
         syncNow,
+        holdRemoteRefresh,
         commitEditorDrafts: (entries, expectations, message) =>
           guardedEditor(expectations, () => {
             if (

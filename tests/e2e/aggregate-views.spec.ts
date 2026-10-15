@@ -239,7 +239,10 @@ for (const board of [false, true]) {
     await expect
       .poll(() => storedTask(page, "a"))
       .toEqual({ ...before, priority: "high" });
-    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await page
+      .getByRole("group", { name: "Edit history" })
+      .getByRole("button", { name: "Undo", exact: true })
+      .click();
     await expect.poll(() => storedTask(page, "a")).toEqual(before);
     await startDrag(page);
     await expect(group(page, "priority", "medium")).toBeVisible();

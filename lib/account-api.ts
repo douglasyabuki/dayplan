@@ -3,6 +3,7 @@ import "server-only";
 import {
   requireAccountSession,
   SessionAccessError,
+  type VerifiedAccountContext,
 } from "@/lib/server-session";
 import { WorkspaceAccessError } from "@/lib/workspace/server";
 import { validateWorkspace } from "@/stores/workspace/validation";
@@ -11,18 +12,21 @@ import type { Workspace } from "@/types-and-constants/workspace";
 /**
  * Runs an authenticated operation and returns a sanitized, uncached response.
  * @param request Incoming same-origin account request.
- * @param operation Operation receiving ownership from the verified session.
+ * @param operation Operation receiving the verified owner ID and request-scoped account context.
  * @returns {Promise<Response>} JSON success or a sanitized error with a stable code.
  * @example accountResponse(request, userId => loadAccountWorkspace(userId));
  */
 export async function accountResponse(
   request: Request,
-  operation: (userId: string) => Promise<unknown>,
+  operation: (
+    userId: string,
+    context: VerifiedAccountContext,
+  ) => Promise<unknown>,
 ): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
   try {
-    const { userId } = await requireAccountSession(request);
-    return Response.json(await operation(userId), { headers });
+    const context = await requireAccountSession(request);
+    return Response.json(await operation(context.userId, context), { headers });
   } catch (error) {
     if (error instanceof SessionAccessError)
       return Response.json(

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { PGlite } from "@electric-sql/pglite";
@@ -32,11 +32,36 @@ let db: PGlite;
 let server: PGLiteSocketServer;
 let prisma: PrismaClient;
 let cookie: string;
+const queries: string[] = [];
 const migrations = [
   "202610110001_auth",
   "202610110002_workspace",
   "202610110003_import",
 ];
+
+function sessionCookie(token: string): string {
+  return (
+    "better-auth.session_token=" +
+    encodeURIComponent(
+      token +
+        "." +
+        createHmac("sha256", process.env.BETTER_AUTH_SECRET!)
+          .update(token)
+          .digest("base64"),
+    )
+  );
+}
+
+function traceSummary() {
+  return {
+    bodyStatements: queries.filter((query) =>
+      /^\s*(SELECT|INSERT|UPDATE)\b/.test(query),
+    ).length,
+    controlStatements: queries
+      .filter((query) => /^\s*(BEGIN|COMMIT|ROLLBACK)\b/.test(query))
+      .map((query) => query.trim()),
+  };
+}
 
 beforeAll(async () => {
   // In-memory PostgreSQL: this suite never reads the connected DATABASE_URL.
@@ -47,12 +72,15 @@ beforeAll(async () => {
     );
   server = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" });
   await server.start();
-  prisma = new PrismaClient({
+  const tracedPrisma = new PrismaClient({
     adapter: new PrismaPg({
       connectionString: `postgresql://postgres@${server.getServerConn()}/postgres`,
       max: 1,
     }),
+    log: [{ emit: "event", level: "query" }],
   });
+  tracedPrisma.$on("query", (event) => queries.push(event.query));
+  prisma = tracedPrisma;
   (globalThis as unknown as { dayplanPrisma: PrismaClient }).dayplanPrisma =
     prisma;
   vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
@@ -136,6 +164,7 @@ test("verified sessions derive ownership and reject missing cookies, mismatches 
   expect(await requireAccountSession(request(headers))).toEqual({
     userId: "account-a",
     sessionId: "session-a",
+    profile: { name: "A", email: "a@example.test", avatarUrl: undefined },
   });
   await expect(requireAccountSession(request({}))).rejects.toMatchObject({
     status: 401,
@@ -169,6 +198,225 @@ test("verified sessions derive ownership and reject missing cookies, mismatches 
     email: "a@example.test",
   });
   expect((await getWorkspace(request({}))).status).toBe(401);
+});
+
+test("profile GET returns only the verified profile without a redundant user SELECT", async () => {
+  const request = () =>
+    new Request("http://localhost:3000/api/profile", {
+      headers: { cookie, "X-Dayplan-Session": "session-a" },
+    });
+  for (const image of [null, "https://example.test/avatar.png"]) {
+    await prisma.user.update({ where: { id: "account-a" }, data: { image } });
+    queries.length = 0;
+    const response = await getProfile(request());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      name: "A",
+      email: "a@example.test",
+      ...(image ? { avatarUrl: image } : {}),
+    });
+    expect(
+      queries.filter(
+        (query) => /^SELECT\b/.test(query) && query.includes('"user"'),
+      ),
+    ).toHaveLength(1);
+  }
+});
+
+test("save metadata and write statement counts cover create, update, replay and conflict", async () => {
+  const userId = randomUUID();
+  await prisma.user.create({
+    data: { id: userId, email: `${userId}@example.test`, name: "Trace" },
+  });
+  const input = {
+    operationId: randomUUID(),
+    expectedRevision: 0,
+    snapshot: emptyWorkspace(),
+  };
+  queries.length = 0;
+  expect(await saveAccountWorkspace(userId, input)).toEqual({
+    committedRevision: 1,
+    currentRevision: 1,
+  });
+  expect(
+    queries.filter((query) => /^\s*(SELECT|INSERT|UPDATE)\b/.test(query)),
+  ).toHaveLength(4);
+  const createTrace = traceSummary();
+  const reads = queries.filter((query) => /^\s*SELECT\b/.test(query));
+  expect(reads).toHaveLength(2);
+  expect(reads[0]).toContain("FOR UPDATE");
+  expect(reads[1]).toContain('LEFT JOIN "WorkspaceSave"');
+  expect(reads.join(" ")).not.toMatch(/snapshot|SELECT\s+\*/i);
+  expect(
+    queries.find((query) => query.includes('INSERT INTO "public"."Workspace"')),
+  ).not.toMatch(/RETURNING.*snapshot/i);
+  queries.length = 0;
+  await saveAccountWorkspace(userId, {
+    ...input,
+    snapshot: { ...input.snapshot, theme: "dark" },
+    operationId: randomUUID(),
+    expectedRevision: 1,
+  });
+  expect(
+    queries.filter((query) => /^\s*(SELECT|INSERT|UPDATE)\b/.test(query)),
+  ).toHaveLength(4);
+  const updateTrace = traceSummary();
+  queries.length = 0;
+  expect(await saveAccountWorkspace(userId, input)).toEqual({
+    committedRevision: 1,
+    currentRevision: 2,
+  });
+  expect(queries.filter((query) => /^\s*SELECT\b/.test(query))).toHaveLength(2);
+  const replayTrace = traceSummary();
+  queries.length = 0;
+  await expect(
+    saveAccountWorkspace(userId, { ...input, operationId: randomUUID() }),
+  ).rejects.toMatchObject({ code: "revision_conflict" });
+  expect(queries.filter((query) => /^\s*SELECT\b/.test(query))).toHaveLength(2);
+  console.info("Isolated SQL trace (not billing):", {
+    create: createTrace,
+    update: updateTrace,
+    replay: replayTrace,
+    conflict: traceSummary(),
+  });
+  expect(await loadAccountWorkspace(userId)).toMatchObject({
+    revision: 2,
+    snapshot: { theme: "dark" },
+  });
+});
+
+test("an existing revision-zero workspace is updated rather than recreated", async () => {
+  const userId = randomUUID();
+  await prisma.user.create({
+    data: { id: userId, email: `${userId}@example.test`, name: "Zero" },
+  });
+  await prisma.workspace.create({
+    data: {
+      userId,
+      revision: 0,
+      snapshot: JSON.parse(JSON.stringify(emptyWorkspace())),
+    },
+  });
+  const snapshot = { ...emptyWorkspace(), theme: "dark" as const };
+  expect(
+    await saveAccountWorkspace(userId, {
+      operationId: randomUUID(),
+      expectedRevision: 0,
+      snapshot,
+    }),
+  ).toEqual({ committedRevision: 1, currentRevision: 1 });
+  expect(await loadAccountWorkspace(userId)).toEqual({ snapshot, revision: 1 });
+});
+
+test("save receipt failures roll back initial creation and existing workspace updates", async () => {
+  const userId = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: userId,
+      email: `${userId}@example.test`,
+      name: "Rollback save",
+    },
+  });
+  await db.exec(`CREATE FUNCTION reject_save_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'isolated save receipt failure'; END $$;
+    CREATE TRIGGER reject_save BEFORE INSERT ON "WorkspaceSave" FOR EACH ROW EXECUTE FUNCTION reject_save_receipt();`);
+  const snapshot = emptyWorkspace();
+  try {
+    await expect(
+      saveAccountWorkspace(userId, {
+        operationId: randomUUID(),
+        expectedRevision: 0,
+        snapshot,
+      }),
+    ).rejects.toThrow();
+    expect(await loadAccountWorkspace(userId)).toEqual({
+      snapshot: null,
+      revision: 0,
+    });
+    await prisma.workspace.create({
+      data: {
+        userId,
+        revision: 4,
+        snapshot: JSON.parse(JSON.stringify(snapshot)),
+      },
+    });
+    await expect(
+      saveAccountWorkspace(userId, {
+        operationId: randomUUID(),
+        expectedRevision: 4,
+        snapshot: { ...snapshot, theme: "dark" },
+      }),
+    ).rejects.toThrow();
+    expect(await loadAccountWorkspace(userId)).toEqual({
+      snapshot,
+      revision: 4,
+    });
+    expect(await prisma.workspaceSave.count({ where: { userId } })).toBe(0);
+  } finally {
+    await db.exec(
+      'DROP TRIGGER reject_save ON "WorkspaceSave"; DROP FUNCTION reject_save_receipt();',
+    );
+  }
+});
+
+test("profile verification rejects expired, revoked and deleted-owner sessions without cookie caching", async () => {
+  for (const invalidation of ["expired", "revoked", "deleted"] as const) {
+    const userId = randomUUID();
+    const token = randomUUID();
+    const sessionId = randomUUID();
+    await prisma.user.create({
+      data: { id: userId, email: `${userId}@example.test`, name: invalidation },
+    });
+    await prisma.session.create({
+      data: {
+        id: sessionId,
+        userId,
+        token,
+        expiresAt: new Date(Date.now() + 8 * 86400000),
+      },
+    });
+    const request = () =>
+      new Request("http://localhost:3000/api/profile", {
+        headers: {
+          cookie: sessionCookie(token),
+          "X-Dayplan-Session": sessionId,
+        },
+      });
+    expect((await getProfile(request())).status).toBe(200);
+    if (invalidation === "expired")
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+    else if (invalidation === "revoked")
+      await prisma.session.delete({ where: { id: sessionId } });
+    else await prisma.user.delete({ where: { id: userId } });
+    const response = await getProfile(request());
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({ code: "unauthorized" });
+    if (invalidation === "deleted") {
+      await expect(
+        saveAccountWorkspace(userId, {
+          operationId: randomUUID(),
+          expectedRevision: 0,
+          snapshot: emptyWorkspace(),
+        }),
+      ).rejects.toMatchObject({ code: "unauthorized" });
+      expect(await prisma.workspace.count({ where: { userId } })).toBe(0);
+    }
+  }
+  const rejectedHeaders: Record<string, string>[] = [
+    {},
+    { cookie, "X-Dayplan-Session": "wrong-session" },
+  ];
+  for (const headers of rejectedHeaders) {
+    const response = await getProfile(
+      new Request("http://localhost:3000/api/profile", { headers }),
+    );
+    expect(response.status).toBe("cookie" in headers ? 403 : 401);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+  }
 });
 
 test("save retries recover completed writes, reject changed payloads and expose newer revisions", async () => {

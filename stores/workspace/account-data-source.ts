@@ -621,13 +621,37 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   }
 
   /** Refresh only confirmed data; unlike reload this never discards unresolved edits. */
-  async refresh(signal: AbortSignal): Promise<Workspace | null> {
+  async refresh(
+    signal: AbortSignal,
+    canAdopt?: () => boolean,
+    onAdopt?: (snapshot: Workspace | null) => void,
+  ): Promise<Workspace | null> {
     await this.stagingQueue;
     return accountCoordinated(
       this.accountId,
       signal,
       Date.now() + 10000,
       async () => {
+        const generation = this.generation;
+        const assertSafe = async () => {
+          // Background reads must not bypass another tab's durable recovery.
+          if (canAdopt) {
+            const records = await listRecovery(this.accountId, signal);
+            signal.throwIfAborted();
+            const guest = readGuestCleanup(this.accountId);
+            if (
+              records.some((record) => record.latest || record.operation) ||
+              (guest?.operation && !guest.confirmed) ||
+              !canAdopt() ||
+              generation !== this.generation
+            )
+              throw new PersistenceError(
+                "sync_pending",
+                "Local work has been kept. Use Sync now when ready.",
+              );
+          }
+        };
+        await assertSafe();
         if (this.pendingSave || this.pendingImport || this.latest)
           throw new PersistenceError(
             "sync_pending",
@@ -649,13 +673,23 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
           );
         const snapshot =
           result.snapshot === null ? null : validateWorkspace(result.snapshot);
-        if (this.pendingSave || this.pendingImport || this.latest)
+        await assertSafe();
+        signal.throwIfAborted();
+        if (
+          this.pendingSave ||
+          this.pendingImport ||
+          this.latest ||
+          (canAdopt && (!canAdopt() || generation !== this.generation))
+        )
           throw new PersistenceError(
             "sync_pending",
             "Local edits changed during sync. They have been kept.",
           );
         this.revision = result.revision;
         this.saved = snapshot ? JSON.stringify(snapshot) : "";
+        // Publish inside the same synchronous boundary as the confirmed baseline.
+        // A later provider continuation could race an edit against that baseline.
+        onAdopt?.(snapshot);
         return snapshot;
       },
     );
