@@ -179,6 +179,44 @@ async function main(): Promise<void> {
       console.log(`PASS post-lock visibility: ${mode}`);
     }
 
+    for (const importFirst of [false, true]) {
+      const userId = await owner();
+      const guest = seedWorkspace();
+      const preview = await runAs(0, () => previewGuestImport(userId, guest));
+      const importOperation = () =>
+        importGuestWorkspace(userId, {
+          snapshot: guest,
+          expectedRevision: 0,
+          confirmedHistoryToken: preview.historyToken,
+        });
+      const saveOperation = () =>
+        saveAccountWorkspace(userId, save(userId, 0).input);
+      const outcomes = await gatedWriters(
+        importFirst ? importOperation : saveOperation,
+        importFirst ? saveOperation : importOperation,
+      );
+      assert.equal(outcomes[0].status, "fulfilled");
+      assert.equal(outcomes[1].status, "rejected");
+      if (outcomes[1].status === "rejected")
+        assert.equal(outcomes[1].reason.code, "revision_conflict");
+      assert.equal(
+        (await clients[0].workspace.findUniqueOrThrow({ where: { userId } }))
+          .revision,
+        1,
+      );
+      assert.equal(
+        await clients[0].workspaceSave.count({ where: { userId } }),
+        importFirst ? 0 : 1,
+      );
+      assert.equal(
+        await clients[0].workspaceImport.count({ where: { userId } }),
+        importFirst ? 1 : 0,
+      );
+      console.log(
+        `PASS same-revision ${importFirst ? "import/save" : "save/import"} conflict`,
+      );
+    }
+
     const deleted = await owner();
     await clients[0].user.delete({ where: { id: deleted } });
     await assert.rejects(
@@ -226,7 +264,7 @@ async function main(): Promise<void> {
       connection.release();
     }
     console.log(
-      "8 PostgreSQL lock checks passed (independent connections, READ COMMITTED).",
+      "10 PostgreSQL lock checks passed (independent connections, READ COMMITTED).",
     );
   } finally {
     globalPrisma.dayplanPrisma = previousPrisma;
