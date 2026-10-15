@@ -115,23 +115,40 @@ export async function saveAccountWorkspace(
   });
   return getPrisma().$transaction(async (tx) => {
     await lockOwner(tx, userId);
-    const prior = await tx.workspaceSave.findUnique({
-      where: { userId_operationId: { userId, operationId: input.operationId } },
-    });
-    const row = await tx.workspace.findUnique({ where: { userId } });
-    if (prior) {
-      if (prior.requestHash !== requestHash)
+    // Keep this statement after the lock: READ COMMITTED must see a writer
+    // that committed while lockOwner was waiting, not a pre-wait snapshot.
+    const [state] = await tx.$queryRaw<
+      {
+        workspacePresent: boolean;
+        revision: number | null;
+        receiptPresent: boolean;
+        requestHash: string | null;
+        committedRevision: number | null;
+      }[]
+    >`
+      SELECT w."userId" IS NOT NULL AS "workspacePresent",
+             w.revision,
+             s."operationId" IS NOT NULL AS "receiptPresent",
+             s."requestHash", s."committedRevision"
+      FROM "user" AS u
+      LEFT JOIN "Workspace" AS w ON w."userId" = u.id
+      LEFT JOIN "WorkspaceSave" AS s
+        ON s."userId" = u.id AND s."operationId" = ${input.operationId}
+      WHERE u.id = ${userId}
+    `;
+    if (state.receiptPresent) {
+      if (state.requestHash !== requestHash)
         throw new WorkspaceAccessError(
           409,
           "operation_mismatch",
           "This save ID was already used for different content.",
         );
       return {
-        committedRevision: prior.committedRevision,
-        currentRevision: row?.revision ?? 0,
+        committedRevision: state.committedRevision!,
+        currentRevision: state.revision ?? 0,
       };
     }
-    if ((row?.revision ?? 0) !== input.expectedRevision)
+    if ((state.revision ?? 0) !== input.expectedRevision)
       throw new WorkspaceAccessError(
         409,
         "revision_conflict",
@@ -139,7 +156,7 @@ export async function saveAccountWorkspace(
       );
     const revision = input.expectedRevision + 1;
     const json = JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonValue;
-    if (row) {
+    if (state.workspacePresent) {
       const result = await tx.workspace.updateMany({
         where: { userId, revision: input.expectedRevision },
         data: { snapshot: json, revision },
@@ -151,8 +168,12 @@ export async function saveAccountWorkspace(
           "Your saved workspace changed.",
         );
     } else
-      await tx.workspace.create({ data: { userId, snapshot: json, revision } });
+      await tx.workspace.create({
+        data: { userId, snapshot: json, revision },
+        select: { userId: true },
+      });
     await tx.workspaceSave.create({
+      select: { userId: true, operationId: true },
       data: {
         userId,
         operationId: input.operationId,

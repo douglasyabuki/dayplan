@@ -5,17 +5,7 @@ import { WorkspaceAccessError } from "@/lib/workspace/server";
 export const runtime = "nodejs";
 
 export async function GET(request: Request): Promise<Response> {
-  return accountResponse(request, async (userId) => {
-    const user = await getPrisma().user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { name: true, email: true, image: true },
-    });
-    return {
-      name: user.name,
-      email: user.email,
-      avatarUrl: user.image ?? undefined,
-    };
-  });
+  return accountResponse(request, async (_userId, context) => context.profile);
 }
 
 export async function PATCH(request: Request): Promise<Response> {
