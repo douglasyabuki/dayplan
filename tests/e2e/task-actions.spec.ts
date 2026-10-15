@@ -63,6 +63,93 @@ const popup = (page: Page) =>
   page.locator('[data-slot="popover-content"][data-open]');
 const menu = (page: Page) =>
   page.locator('[data-slot="context-menu-content"][data-open]');
+
+test("saved task edits have independent undo/redo while native text history stays in the editor", async ({
+  page,
+}) => {
+  await seed(page);
+  const history = page.getByRole("group", { name: "Edit history" });
+  const undo = history.getByRole("button", { name: "Undo", exact: true });
+  const redo = history.getByRole("button", { name: "Redo", exact: true });
+  await expect(undo).toBeDisabled();
+  await card(page)
+    .getByRole("button", { name: "Edit Alpha task", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Edit task", exact: true });
+  const title = editor.getByRole("textbox", {
+    name: "Task title",
+    exact: true,
+  });
+  await title.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" edited");
+  await expect(title).toHaveValue("Alpha task edited");
+  await page.keyboard.press("Control+z");
+  await expect(title).toHaveValue("Alpha task");
+  await page.keyboard.press("Control+Shift+z");
+  await expect(title).toHaveValue("Alpha task edited");
+  expect((await stored(page)).tasks[0].title).toBe("Alpha task");
+  await editor
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(card(page, "Alpha task edited")).toBeVisible();
+  await page.getByRole("heading", { name: "Inbox", exact: true }).click();
+  await page.keyboard.press("Control+z");
+  await expect(card(page)).toBeVisible();
+  await expect(undo).toBeDisabled();
+  await expect(redo).toBeEnabled();
+  await page.keyboard.press("Control+Shift+z");
+  await expect(card(page, "Alpha task edited")).toBeVisible();
+  await page.reload();
+  await expect(card(page, "Alpha task edited")).toBeVisible();
+  await expect(undo).toBeDisabled();
+  await expect(redo).toBeDisabled();
+});
+
+test("quick creation is one step across navigation and history controls fit mobile headers and editors", async ({
+  page,
+}) => {
+  await seed(page);
+  await page.goto("/inbox?group=none");
+  const quick = page.getByRole("textbox", { name: "Quick add task" });
+  await quick.fill("Created task");
+  await quick.press("Enter");
+  await expect(card(page, "Created task")).toBeVisible();
+  await page.locator('a[href="/projects"]').click();
+  const history = page.getByRole("group", { name: "Edit history" });
+  await expect(
+    history.getByRole("button", { name: "Undo", exact: true }),
+  ).toBeEnabled();
+  await history.getByRole("button", { name: "Undo", exact: true }).click();
+  expect(
+    (await stored(page)).tasks.map((t: { title: string }) => t.title),
+  ).not.toContain("Created task");
+  await expect(
+    history.getByRole("button", { name: "Undo", exact: true }),
+  ).toBeDisabled();
+  await history.getByRole("button", { name: "Redo", exact: true }).click();
+  await page.locator('a[href="/inbox"]').click();
+  await expect(card(page, "Created task")).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(
+    history.getByRole("button", { name: "Undo", exact: true }),
+  ).toBeVisible();
+  await card(page, "Created task")
+    .getByRole("button", { name: "Edit Created task", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Edit task", exact: true });
+  await expect(
+    editor.getByRole("button", { name: "Undo", exact: true }),
+  ).toBeVisible();
+  await expect(
+    editor.getByRole("button", { name: "Redo", exact: true }),
+  ).toBeVisible();
+  expect(
+    await editor.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+});
 async function stored(page: Page) {
   return page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key);
 }
