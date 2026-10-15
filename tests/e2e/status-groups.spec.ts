@@ -324,7 +324,10 @@ for (const board of [false, true]) {
         (await stored(page)).tasks.find((t: { id: string }) => t.id === "open"),
       )
       .toMatchObject({ parentId: "parent", completed: true });
-    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await page
+      .getByRole("group", { name: "Edit history" })
+      .getByRole("button", { name: "Undo", exact: true })
+      .click();
     await expect
       .poll(
         async () =>
