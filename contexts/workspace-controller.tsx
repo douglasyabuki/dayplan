@@ -4,6 +4,7 @@ import {
   createContext,
   type ReactNode,
   useContext,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -25,7 +26,8 @@ type CollectionDialogState =
   | { kind: "tags"; entity?: Tag; parentId?: string | null; mode?: "move" };
 
 function useControllerState() {
-  const { state, today, save, act, reset, storageError } = useWorkspace();
+  const { state, today, save, act, reset, storageError, holdRemoteRefresh } =
+    useWorkspace();
   const { router, routeKey, view, selectedId, params, setParams } =
     useWorkspaceNavigation();
   const viewData = useWorkspaceView({ state, today, view, selectedId, params });
@@ -82,6 +84,19 @@ function useControllerState() {
     closeTaskActions,
     setStatusCollapsed,
   });
+  const holdsRefresh = !!(
+    settings ||
+    entity ||
+    sectionDialog ||
+    editor.quickTitle ||
+    editor.newDraft ||
+    editor.selectedTaskId ||
+    drag.dragSnapshot ||
+    drag.pendingDateDrop
+  );
+  useLayoutEffect(() => {
+    if (holdsRefresh) return holdRemoteRefresh();
+  }, [holdsRefresh, holdRemoteRefresh]);
 
   function reorder(ids: string[]) {
     act({ type: "reorderTasks", tasks: allTasks, ids }, "Task order updated");

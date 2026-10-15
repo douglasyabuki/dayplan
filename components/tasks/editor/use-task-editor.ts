@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import { addDays } from "@/lib/dates";
@@ -29,6 +29,8 @@ export function useEditorSession(
   close: () => void,
 ) {
   const workspace = useWorkspace();
+  const { holdRemoteRefresh } = workspace;
+  useLayoutEffect(() => holdRemoteRefresh(), [holdRemoteRefresh]);
   const [initialState] = useState(() => structuredClone(workspace.state));
   const [baselines, setBaselines] = useState<Record<string, Workspace>>({});
   const [reviewRevision, setReviewRevision] = useState(0);

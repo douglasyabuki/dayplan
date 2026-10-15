@@ -53,6 +53,32 @@ function SelectedEditor() {
   ) : null;
 }
 
+test("automatic focus refresh defers while the actual task editor retains a draft", async () => {
+  const remote = server();
+  const screen = await render(
+    <WorkspaceProvider dataSource={remote.source}>
+      <Harness />
+      <SelectedEditor />
+    </WorkspaceProvider>,
+  );
+  await screen.getByRole("button", { name: "Draft title" }).click();
+  remote.edit(state([task("b")]));
+  const now = Date.now();
+  vi.spyOn(Date, "now").mockReturnValue(now + 31000);
+  window.dispatchEvent(new Event("focus"));
+  // The local draft remains actionable; no background response removes its task.
+  await expect
+    .element(screen.getByRole("button", { name: "Save draft" }))
+    .toBeEnabled();
+  expect(remote.calls).toEqual(["read"]);
+  expect(exposed.state.tasks.some((task) => task.id === "a")).toBe(true);
+  await screen.getByRole("button", { name: "Save draft" }).click();
+  await expect
+    .element(screen.getByTestId("task-title"))
+    .toHaveTextContent("My draft");
+  await screen.unmount();
+});
+
 test("selected editor session stays mounted with its draft after remote task deletion", async () => {
   const remote = server();
   const screen = await render(
