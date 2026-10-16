@@ -1,3 +1,5 @@
+import type { Workspace } from "@/types-and-constants/workspace";
+
 import { expect, type Page, test } from "./fixtures";
 
 const key = "dayplan.workspace.v2";
@@ -21,12 +23,16 @@ async function seed(
   page: Page,
   board = false,
   tasks: object[] = [baseTask("a", 0), baseTask("b", 1)],
+  collections: Pick<Workspace, "projects" | "sections"> = {
+    projects: [],
+    sections: [],
+  },
 ) {
   await page.addInitScript(() =>
     localStorage.setItem("dayplan.onboarding.v1", "complete"),
   );
   await page.addInitScript(
-    ({ key, tasks, board }) => {
+    ({ key, tasks, board, collections }) => {
       if (!sessionStorage.getItem("test-seeded")) {
         localStorage.setItem(
           key,
@@ -34,8 +40,7 @@ async function seed(
             version: 2,
             tasks,
             exceptions: {},
-            sections: [],
-            projects: [],
+            ...collections,
             tags: [{ id: "work", name: "Work", color: "sky" }],
             layouts: { inbox: board ? "board" : "list" },
             timezone: "UTC",
@@ -45,7 +50,7 @@ async function seed(
         sessionStorage.setItem("test-seeded", "true");
       }
     },
-    { key, tasks, board },
+    { key, tasks, board, collections },
   );
   await page.goto("/inbox");
   await expect(
@@ -169,6 +174,69 @@ async function drag(
 }
 
 for (const board of [false, true]) {
+  test(`${board ? "board" : "list"}: context-menu move stages location, cancels and commits with one Undo`, async ({
+    page,
+  }) => {
+    await seed(page, board, [baseTask("a", 0), baseTask("b", 1)], {
+      projects: [{ id: "destination", name: "Destination", color: "sky" }],
+      sections: [
+        { id: "next", name: "Next", projectId: "destination", order: 0 },
+      ],
+    });
+    const move = page.getByRole("dialog", { name: "Move to", exact: true });
+    const undo = page
+      .getByRole("group", { name: "Edit history" })
+      .getByRole("button", { name: "Undo", exact: true });
+    async function chooseDestination() {
+      await card(page).click({ button: "right" });
+      await menu(page)
+        .getByRole("menuitem", { name: "Move to", exact: true })
+        .click();
+      await move
+        .getByRole("combobox", { name: "Project", exact: true })
+        .click();
+      await page
+        .getByRole("option", { name: "Destination", exact: true })
+        .click();
+      await move
+        .getByRole("combobox", { name: "Section", exact: true })
+        .click();
+      await page.getByRole("option", { name: "Next", exact: true }).click();
+    }
+    await chooseDestination();
+    await expect(card(page)).toBeVisible();
+    expect((await stored(page)).tasks[0]).toMatchObject({
+      projectId: null,
+      sectionId: null,
+    });
+    await expect(undo).toBeDisabled();
+    await move.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(move).toHaveCount(0);
+    expect((await stored(page)).tasks[0]).toMatchObject({
+      projectId: null,
+      sectionId: null,
+    });
+
+    await chooseDestination();
+    await move.getByRole("button", { name: "Move", exact: true }).click();
+    await expect(move).toHaveCount(0);
+    await expect(card(page)).toHaveCount(0);
+    await expect
+      .poll(async () => (await stored(page)).tasks[0])
+      .toMatchObject({
+        projectId: "destination",
+        sectionId: "next",
+      });
+    await undo.click();
+    await expect(card(page)).toBeVisible();
+    await expect(move).toHaveCount(0);
+    await expect(undo).toBeDisabled();
+    expect((await stored(page)).tasks[0]).toMatchObject({
+      projectId: null,
+      sectionId: null,
+    });
+  });
+
   test(`${board ? "board" : "list"}: metadata updates, toggles and switches across cards`, async ({
     page,
   }) => {
