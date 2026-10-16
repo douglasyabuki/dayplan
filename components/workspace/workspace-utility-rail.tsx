@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import {
+  CircleHelp,
   LogIn,
   LogOut,
   Monitor,
@@ -87,6 +88,10 @@ export function WorkspaceUtilityRail({
             >
               <Settings aria-hidden="true" />
               Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/help" onClick={close} />}>
+              <CircleHelp aria-hidden="true" />
+              Help and contact
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />

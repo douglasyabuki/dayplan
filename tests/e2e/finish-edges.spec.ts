@@ -73,11 +73,53 @@ async function account(page: Page) {
   return requests;
 }
 
+test("Help works without a workspace, and unknown pages offer usable navigation", async ({
+  page,
+}) => {
+  await page.goto("/help");
+  await expect(
+    page.getByRole("heading", { name: "Help and contact" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Contact support" }),
+  ).toBeVisible();
+  await page.goto("/this-page-does-not-exist");
+  await expect(
+    page.getByRole("heading", { name: "Page not found" }),
+  ).toBeFocused();
+  await page.getByRole("link", { name: "Help and contact" }).click();
+  await expect(page).toHaveURL(/\/help$/);
+});
+
+test("missing project and tag IDs offer collection navigation without creation controls", async ({
+  page,
+}) => {
+  await account(page);
+  for (const kind of ["projects", "tags"]) {
+    await page.goto(`/${kind}/missing`);
+    await expect(
+      page.getByRole("heading", {
+        name: kind === "projects" ? "Project not found" : "Tag not found",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Add task", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("link", { name: `Back to ${kind}`, exact: true })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/${kind}$`));
+  }
+});
+
 test("account deletion requires confirmation, offers backup, and preserves independent guest bytes", async ({
   page,
 }) => {
   const requests = await account(page);
   await page.goto("/today?settings=account");
+  await expect(
+    page.getByRole("button", { name: /Change profile photo/ }),
+  ).toHaveCount(0);
   await page
     .getByRole("button", { name: "Delete account", exact: true })
     .click();

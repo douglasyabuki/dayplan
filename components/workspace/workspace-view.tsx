@@ -33,6 +33,7 @@ import {
   KanbanSectionBoard,
   ListSectionGroups,
 } from "@/components/sections/task-sections";
+import { RecoveryScreen } from "@/components/shared/recovery-screen";
 import { SectionRemovalDropZone } from "@/components/tasks/task-drag-feedback";
 import { KanbanTaskBoard, TaskList } from "@/components/tasks/task-groups";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -72,6 +73,7 @@ import { dateKey, formatDate, parseDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { aggregateGroupings, isAggregateView } from "@/lib/workspace/grouping";
 import type { WorkspaceRoute } from "@/lib/workspace/routes";
+import { useWorkspace } from "@/stores/workspace/provider";
 import { priorities } from "@/types-and-constants/tasks";
 
 import { WorkspaceContentLoading } from "./workspace-content-loading";
@@ -138,6 +140,7 @@ export function WorkspaceView({
     activeFilters,
     description,
   } = useWorkspaceController();
+  const workspace = useWorkspace();
   const compact =
     ["inbox", "today", "upcoming", "tasks", "calendar"].includes(view) ||
     !!selectedEntity;
@@ -216,6 +219,20 @@ export function WorkspaceView({
   // A retained page must not display another route's content during navigation.
   if (route.view !== view || route.selectedId !== selectedId)
     return <WorkspaceContentLoading />;
+  if (
+    workspace.ready &&
+    !workspace.error &&
+    selectedId &&
+    (view === "projects" || view === "tags") &&
+    !selectedEntity
+  )
+    return (
+      <RecoveryScreen
+        title={view === "projects" ? "Project not found" : "Tag not found"}
+        description="This item may have been deleted or belongs to another workspace. Choose an existing collection to continue."
+        collection={view}
+      />
+    );
   return (
     <div
       className={cn(

@@ -1,6 +1,5 @@
 "use client";
 
-import { Camera } from "lucide-react";
 import {
   type Ref,
   useEffect,
@@ -113,30 +112,8 @@ export function AccountPanel({
     <div className="flex flex-col gap-6">
       {!capabilities.hasAccount && <AuthControls />}
       <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          className="group relative size-16 shrink-0 rounded-full p-0"
-          aria-disabled="true"
-          aria-label="Change profile photo — coming soon"
-          aria-describedby="photo-help"
-        >
-          <AccountAvatar className="size-16" />
-          <span
-            className="bg-background/80 absolute inset-0 flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-            aria-hidden="true"
-          >
-            <Camera />
-          </span>
-        </Button>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{profile.name}</p>
-          <p
-            id="photo-help"
-            className="text-muted-foreground text-sm leading-normal"
-          >
-            Photo uploads coming soon
-          </p>
-        </div>
+        <AccountAvatar className="size-16" />
+        <p className="truncate text-sm font-medium">{profile.name}</p>
       </div>
       <FieldGroup>
         <Field

@@ -153,6 +153,9 @@ export function SessionError({ message }: { message: string }) {
         <RefreshCw data-icon="inline-start" aria-hidden="true" />
         Retry session
       </Button>
+      <a href="/help" className="underline">
+        Help and contact
+      </a>
     </Alert>
   );
 }

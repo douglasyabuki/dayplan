@@ -52,6 +52,7 @@ test("account menu opens to the right, supports keyboard dismissal, and offers g
   await expect(menu).toBeVisible();
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Settings",
+    "Help and contact",
     "Sign in",
     "Sign up",
   ]);
@@ -67,6 +68,7 @@ test("account menu opens to the right, supports keyboard dismissal, and offers g
   await expect(
     menu.getByRole("menuitem", { name: "Settings", exact: true }),
   ).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/sign-in\?next=/);
@@ -244,7 +246,7 @@ test("unavailable storage permits session-only guest access and navigation", asy
     .click();
   await expect(page).toHaveURL(/\/inbox\?sort=title$/);
   await expect(
-    page.getByText("Session only · storage unavailable"),
+    page.getByText("Session only ? storage unavailable"),
   ).toBeVisible();
   await page.getByRole("link", { name: "Today", exact: true }).first().click();
   await expect(page).toHaveURL(/\/today$/);

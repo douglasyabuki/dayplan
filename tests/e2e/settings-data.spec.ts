@@ -262,6 +262,7 @@ test("signed-in avatar offers sign-out without guest sign-in or sign-up options"
     .click();
   await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
     "Settings",
+    "Help and contact",
     "Sign out",
   ]);
 });

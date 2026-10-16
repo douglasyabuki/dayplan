@@ -59,6 +59,7 @@ export function DataPanel({
     retrySave,
     reloadSaved,
     recoveryCode,
+    retryRecovery,
   } = workspace;
   const account = persistenceKind === "database";
   const disabled = !ready || busy || hasPendingImport || (account && !!error);
@@ -120,6 +121,14 @@ export function DataPanel({
                     >
                       <RefreshCw data-icon="inline-start" aria-hidden="true" />
                       Retry import
+                    </Button>
+                  ) : recoveryCode === "load_failed" ? (
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={retryRecovery}
+                    >
+                      Retry recovery
                     </Button>
                   ) : (
                     recoveryCode !== "revision_conflict" &&

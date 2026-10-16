@@ -182,6 +182,11 @@ export function AuthScreen({ mode }: { mode: "sign-in" | "sign-up" }) {
               Explore as a guest
             </Link>
           </CardFooter>
+          <div className="px-6 pb-6">
+            <Link href="/help" className="text-sm underline">
+              Help and contact
+            </Link>
+          </div>
         </Card>
       </main>
     </div>
