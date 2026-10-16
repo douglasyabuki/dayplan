@@ -246,7 +246,10 @@ test("unavailable storage permits session-only guest access and navigation", asy
     .click();
   await expect(page).toHaveURL(/\/inbox\?sort=title$/);
   await expect(
-    page.getByText("Session only ? storage unavailable"),
+    page.getByRole("button", {
+      name: "Workspace sync: Needs attention",
+      exact: true,
+    }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Today", exact: true }).first().click();
   await expect(page).toHaveURL(/\/today$/);

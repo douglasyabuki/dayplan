@@ -313,6 +313,17 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
           : null;
   }
 
+  get hasDurableRecovery(): boolean {
+    return (
+      !this.recoveryStorageError &&
+      !!this.durableRecord &&
+      JSON.stringify(this.durableRecord.latest) ===
+        JSON.stringify(this.latest) &&
+      JSON.stringify(this.durableRecord.operation?.snapshot ?? null) ===
+        JSON.stringify(this.pendingSave?.snapshot ?? null)
+    );
+  }
+
   get immediateSaving() {
     return !!this.recoveryStorageError;
   }

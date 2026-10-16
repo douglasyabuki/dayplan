@@ -176,9 +176,7 @@ function Harness() {
   return (
     <>
       <p>{workspace.ready ? workspace.state.theme : "Loading"}</p>
-      <p>
-        {workspace.deletionPaused ? "Deletion paused" : workspace.syncStatus}
-      </p>
+      <p>{workspace.saveFeedback.label}</p>
       <button onClick={() => workspace.act({ type: "theme", theme: "dark" })}>
         Edit
       </button>

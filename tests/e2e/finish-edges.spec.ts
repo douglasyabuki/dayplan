@@ -81,6 +81,9 @@ test("Help works without a workspace, and unknown pages offer usable navigation"
     page.getByRole("heading", { name: "Help and contact" }),
   ).toBeVisible();
   await expect(
+    page.getByRole("heading", { name: "Understand saving" }),
+  ).toBeVisible();
+  await expect(
     page.getByRole("heading", { name: "Contact support" }),
   ).toBeVisible();
   await page.goto("/this-page-does-not-exist");
@@ -110,6 +113,29 @@ test("missing project and tag IDs offer collection navigation without creation c
       .click();
     await expect(page).toHaveURL(new RegExp(`/${kind}$`));
   }
+});
+
+test("mobile save feedback remains visible with navigation closed", async ({
+  page,
+}) => {
+  await account(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/today");
+  const status = page.getByRole("button", {
+    name: "Workspace sync: Saved",
+    exact: true,
+  });
+  await expect(status).toBeVisible();
+  await expect(status).toHaveText("Saved");
+  await status.click();
+  await expect(
+    page.getByRole("button", { name: "Sync now", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test("account deletion requires confirmation, offers backup, and preserves independent guest bytes", async ({

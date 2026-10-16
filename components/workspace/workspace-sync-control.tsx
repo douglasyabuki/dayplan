@@ -31,21 +31,14 @@ const icons = {
   Offline: CloudOff,
   "Needs attention": TriangleAlert,
 };
-const descriptions = {
-  Saved:
-    "Your workspace edits are saved. Sync now to check for remote changes.",
-  Pending: "Local edits are waiting to be saved.",
-  Saving:
-    "Saving edits and checking for remote changes. Workspace changes are briefly paused during sync.",
-  Offline:
-    "Sync could not reach account storage. Your local edits have been kept.",
-  "Needs attention": "Resolve the storage or recovery issue before syncing.",
-};
-
 export function WorkspaceSyncControl({
   openData,
+  showLabel = false,
+  announce = true,
 }: {
   openData: (trigger: HTMLElement) => void;
+  showLabel?: boolean;
+  announce?: boolean;
 }) {
   const {
     persistenceKind,
@@ -54,8 +47,9 @@ export function WorkspaceSyncControl({
     syncNow,
     error,
     recoveryStorageError,
+    saveFeedback,
   } = useWorkspace();
-  if (persistenceKind !== "database") return null;
+  if (persistenceKind !== "database" && !showLabel) return null;
   const Icon = icons[syncStatus];
   return (
     <Popover>
@@ -66,7 +60,7 @@ export function WorkspaceSyncControl({
               render={
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size={showLabel ? "sm" : "icon"}
                   aria-label={`Workspace sync: ${syncStatus}`}
                 />
               }
@@ -79,22 +73,31 @@ export function WorkspaceSyncControl({
               syncStatus === "Saving" ? "motion-safe:animate-spin" : undefined
             }
           />
+          {showLabel && <span>{saveFeedback.label}</span>}
         </TooltipTrigger>
         <TooltipContent side="right">{syncStatus}</TooltipContent>
       </Tooltip>
-      <span role="status" aria-live="polite" className="sr-only">
-        Workspace sync: {syncStatus}
-      </span>
-      <PopoverContent side="right" align="start" sideOffset={8}>
+      {announce && (
+        <span role="status" aria-live="polite" className="sr-only">
+          Workspace save: {saveFeedback.label}
+        </span>
+      )}
+      <PopoverContent
+        side={showLabel ? "bottom" : "right"}
+        align="end"
+        sideOffset={8}
+      >
         <PopoverHeader>
-          <PopoverTitle>{syncStatus}</PopoverTitle>
+          <PopoverTitle>{saveFeedback.label}</PopoverTitle>
           <PopoverDescription>
-            {error || recoveryStorageError || descriptions[syncStatus]}
+            {recoveryStorageError || error || saveFeedback.description}
           </PopoverDescription>
         </PopoverHeader>
-        <Button disabled={!syncAvailable} onClick={() => void syncNow()}>
-          Sync now
-        </Button>
+        {persistenceKind === "database" && (
+          <Button disabled={!syncAvailable} onClick={() => void syncNow()}>
+            Sync now
+          </Button>
+        )}
         {syncStatus === "Needs attention" && (
           <Button
             variant="outline"

@@ -60,6 +60,7 @@ export function DataPanel({
     reloadSaved,
     recoveryCode,
     retryRecovery,
+    saveFeedback,
   } = workspace;
   const account = persistenceKind === "database";
   const disabled = !ready || busy || hasPendingImport || (account && !!error);
@@ -86,8 +87,12 @@ export function DataPanel({
         <h3 className="text-sm font-medium">Your workspace</h3>
         <p className="text-muted-foreground text-sm leading-normal">
           {account
-            ? "Your workspace is saved to your account."
-            : "Your workspace is saved in this browser."}
+            ? "Storage location: your account."
+            : "Storage location: this browser."}
+        </p>
+        <p className="text-sm font-medium">{saveFeedback.label}</p>
+        <p className="text-muted-foreground text-xs">
+          {saveFeedback.description}
         </p>
         <p className="text-muted-foreground text-xs">
           Timezone: {state.timezone.replaceAll("_", " ")}

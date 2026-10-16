@@ -3,7 +3,6 @@
 import { DragDropProvider } from "@dnd-kit/react";
 import type { CSSProperties, ReactNode } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -28,6 +27,7 @@ import { useWorkspace } from "@/stores/workspace/provider";
 import { WorkspaceFeedback } from "./workspace-feedback";
 import { WorkspaceLoading } from "./workspace-loading";
 import { WorkspaceOverlays } from "./workspace-overlays";
+import { WorkspaceSyncControl } from "./workspace-sync-control";
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const { ready } = useWorkspace();
@@ -61,11 +61,10 @@ function WorkspaceLayout({ children }: { children: ReactNode }) {
 }
 
 function WorkspaceFrame({ children }: { children: ReactNode }) {
-  const { persistenceKind, busy } = useWorkspace();
   const { open, openMobile, isMobile, setOpenMobile } = useSidebar();
   const sidebarOpen = isMobile ? openMobile : open;
   const sidebarLabel = sidebarOpen ? "Collapse sidebar" : "Expand sidebar";
-  const { storageError, title, dragEnd, dragStart, dragMove, sidebarProps } =
+  const { title, dragEnd, dragStart, dragMove, sidebarProps, openSettings } =
     useWorkspaceController();
   return (
     <DragDropProvider
@@ -98,19 +97,10 @@ function WorkspaceFrame({ children }: { children: ReactNode }) {
               </BreadcrumbList>
             </Breadcrumb>
           </div>
-          <Badge
-            variant="secondary"
-            className="text-muted-foreground hidden items-center gap-2 text-[10px] sm:inline-flex"
-          >
-            <span className="size-1.5 rounded-full bg-(--emerald)" />
-            {storageError
-              ? "Session only · storage unavailable"
-              : busy
-                ? "Updating account workspace…"
-                : persistenceKind === "database"
-                  ? "Account storage"
-                  : "Saved locally"}
-          </Badge>
+          <WorkspaceSyncControl
+            showLabel
+            openData={(trigger) => openSettings("data", trigger)}
+          />
         </header>
         {children}
       </SidebarInset>

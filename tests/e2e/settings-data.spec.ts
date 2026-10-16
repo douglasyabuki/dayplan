@@ -119,7 +119,7 @@ test("signed-in Data settings exports, confirms sample replacement, preserves pr
     settings.getByRole("heading", { name: "Sample data", exact: true }),
   ).toBeVisible();
   await expect(
-    settings.getByText("Your workspace is saved to your account.", {
+    settings.getByText("Storage location: your account.", {
       exact: true,
     }),
   ).toBeVisible();

@@ -20,6 +20,14 @@ const guidance = [
     "Guest plans belong to this browser. Account plans belong to the signed-in user. Signing in does not automatically merge them. Open Settings → Data to review, import, or discard guest data.",
   ],
   [
+    "Understand saving",
+    "Pending means workspace changes are waiting for automatic saving. Saving means work is underway. Saved confirms committed workspace edits in account storage; Saved in this browser confirms local guest storage. Open task-editor drafts and profile changes are separate.",
+  ],
+  [
+    "Offline and recovery",
+    "Offline means account storage cannot be reached. Check the save control for recovery details. Keep the page open or download a backup until saving is confirmed. Needs attention means a conflict, import, or storage problem needs an action. Use Settings → Data to retry or review recovery. Loading the server version replaces local edits and requires confirmation.",
+  ],
+  [
     "Back up and restore",
     "Settings → Data can download a JSON backup of your current workspace, including committed edits waiting to sync. Open editor drafts and profile details are excluded: save or review drafts first. Restoring a backup replaces the current workspace after confirmation. Download a copy before replacing or clearing data.",
   ],

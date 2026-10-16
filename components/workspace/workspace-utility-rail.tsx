@@ -150,6 +150,7 @@ export function WorkspaceUtilityRail({
         <Search />
       </Button>
       <WorkspaceSyncControl
+        announce={false}
         openData={(trigger) => {
           settings("data", trigger);
           close?.();
