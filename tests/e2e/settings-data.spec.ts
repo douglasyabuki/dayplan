@@ -119,7 +119,7 @@ test("signed-in Data settings exports, confirms sample replacement, preserves pr
     settings.getByRole("heading", { name: "Sample data", exact: true }),
   ).toBeVisible();
   await expect(
-    settings.getByText("Your workspace is saved to your account.", {
+    settings.getByText("Storage location: your account.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -262,6 +262,7 @@ test("signed-in avatar offers sign-out without guest sign-in or sign-up options"
     .click();
   await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
     "Settings",
+    "Help and contact",
     "Sign out",
   ]);
 });

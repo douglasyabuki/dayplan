@@ -69,6 +69,14 @@ export function Welcome() {
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-20 px-6 pt-10 pb-16 sm:px-10 sm:pt-16 lg:gap-24">
+        {params.get("accountDeleted") === "1" && (
+          <Alert>
+            <AlertDescription>
+              Your account has been deleted. Independent guest plans are still
+              available in this browser.
+            </AlertDescription>
+          </Alert>
+        )}
         <section
           aria-labelledby="welcome-heading"
           className="grid items-center gap-12 lg:grid-cols-2 lg:gap-14"

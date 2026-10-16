@@ -1,4 +1,5 @@
 import { isPromise, serialized } from "@/stores/persistence/queue";
+import { readDeletion } from "@/stores/session/deletion-state";
 import type { Workspace } from "@/types-and-constants/workspace";
 
 import { bounded } from "./coordination";
@@ -36,7 +37,13 @@ export class WorkspacePersistenceSession {
   }
 
   get active() {
-    return !this.controller.signal.aborted;
+    return (
+      !this.controller.signal.aborted &&
+      !(
+        this.source.owner.kind === "account" &&
+        readDeletion(this.source.owner.userId)
+      )
+    );
   }
 
   close() {

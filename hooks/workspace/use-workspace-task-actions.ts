@@ -28,6 +28,7 @@ export function useWorkspaceTaskActions({
     task: Occurrence;
     kind: QuickActionKind;
     anchor: HTMLElement;
+    positionAnchor: HTMLElement;
     routeKey: string;
   } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -49,7 +50,16 @@ export function useWorkspaceTaskActions({
       current.kind === kind &&
       current.anchor === anchor
         ? null
-        : { task, kind, anchor, routeKey },
+        : {
+            task,
+            kind,
+            anchor,
+            positionAnchor:
+              kind === "schedule" || kind === "deadline"
+                ? (anchor.closest<HTMLElement>("[data-task-item]") ?? anchor)
+                : anchor,
+            routeKey,
+          },
     );
   }
   useEffect(() => {
@@ -65,6 +75,21 @@ export function useWorkspaceTaskActions({
       setQuickAction(null);
     }
   }, [state, quickAction]);
+  useEffect(() => {
+    if (!quickAction) return;
+    const { positionAnchor: anchor } = quickAction;
+    // Filtering or regrouping can remove the anchor while the task still exists.
+    function dismissDetachedAnchor() {
+      if (!anchor.isConnected) setQuickAction(null);
+    }
+    dismissDetachedAnchor();
+    const observer = new MutationObserver(dismissDetachedAnchor);
+    observer.observe(anchor.ownerDocument.body, {
+      childList: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, [quickAction]);
 
   return {
     quickAction:

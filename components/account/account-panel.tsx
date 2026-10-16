@@ -1,6 +1,5 @@
 "use client";
 
-import { Camera, UserRoundX } from "lucide-react";
 import {
   type Ref,
   useEffect,
@@ -25,13 +24,20 @@ import { useAccount } from "@/stores/account/provider";
 import { AccountAvatar } from "./account-avatar";
 import { AuthControls } from "./auth-controls";
 import { ConnectedAccounts } from "./connected-accounts";
+import { DeleteAccount } from "./delete-account";
 
 export type AccountEditHandle = {
   commit: () => Promise<boolean>;
   cancel: () => void;
 };
 
-export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
+export function AccountPanel({
+  ref,
+  openData,
+}: {
+  ref?: Ref<AccountEditHandle>;
+  openData?: () => void;
+}) {
   const {
     profile,
     ready,
@@ -106,30 +112,8 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
     <div className="flex flex-col gap-6">
       {!capabilities.hasAccount && <AuthControls />}
       <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          className="group relative size-16 shrink-0 rounded-full p-0"
-          aria-disabled="true"
-          aria-label="Change profile photo — coming soon"
-          aria-describedby="photo-help"
-        >
-          <AccountAvatar className="size-16" />
-          <span
-            className="bg-background/80 absolute inset-0 flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-            aria-hidden="true"
-          >
-            <Camera />
-          </span>
-        </Button>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{profile.name}</p>
-          <p
-            id="photo-help"
-            className="text-muted-foreground text-sm leading-normal"
-          >
-            Photo uploads coming soon
-          </p>
-        </div>
+        <AccountAvatar className="size-16" />
+        <p className="truncate text-sm font-medium">{profile.name}</p>
       </div>
       <FieldGroup>
         <Field
@@ -214,20 +198,21 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
         </>
       )}
       <Separator />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-destructive text-sm font-medium">Delete account</p>
-          <p className="text-muted-foreground text-sm">
-            {capabilities.hasAccount
-              ? "Not available yet"
-              : "Guests have no account to delete."}
+      {capabilities.hasAccount ? (
+        <DeleteAccount email={profile.email} beforeReauthentication={commit} />
+      ) : (
+        <div className="flex flex-col items-start gap-2">
+          <p>
+            Guests have no account to delete. Manage this browser&apos;s
+            workspace in Data settings.
           </p>
+          {openData && (
+            <Button variant="outline" onClick={openData}>
+              Open Data settings
+            </Button>
+          )}
         </div>
-        <Button variant="destructive" disabled>
-          <UserRoundX data-icon="inline-start" aria-hidden="true" />
-          Delete account
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

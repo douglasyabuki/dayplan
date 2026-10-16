@@ -9,6 +9,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
+import {
+  deleteAccount,
+  deletionCapability,
+  settleAccountDeletion,
+} from "@/lib/account-deletion";
 import { PrismaClient } from "@/lib/generated/prisma/client";
 import { emptyWorkspace } from "@/lib/workspace/empty";
 import { seedWorkspace } from "@/lib/workspace/seed";
@@ -263,8 +268,85 @@ async function main(): Promise<void> {
       await connection.query("ROLLBACK");
       connection.release();
     }
+    process.env.BETTER_AUTH_SECRET = "isolated-postgres-deletion-test-secret";
+    await observer.query(`CREATE FUNCTION gate_user_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(${barrierKey}); RETURN OLD; END $$;
+      CREATE TRIGGER gate_user_delete BEFORE DELETE ON "user" FOR EACH ROW EXECUTE FUNCTION gate_user_delete();`);
+    for (const mode of ["save", "import"] as const) {
+      for (const deleteFirst of [false, true]) {
+        const id = await owner();
+        const sessionId = randomUUID();
+        await clients[0].session.create({
+          data: {
+            id: sessionId,
+            userId: id,
+            token: randomUUID(),
+            expiresAt: new Date(Date.now() + 86_400_000),
+          },
+        });
+        const capability = await runAs(0, () =>
+          deletionCapability(id, sessionId),
+        );
+        const guest = seedWorkspace();
+        const preview = await runAs(0, () => previewGuestImport(id, guest));
+        const writing = () =>
+          mode === "save"
+            ? saveAccountWorkspace(id, save(id, 0).input)
+            : importGuestWorkspace(id, {
+                snapshot: guest,
+                expectedRevision: 0,
+                confirmedHistoryToken: preview.historyToken,
+              });
+        const deletingAccount = () => deleteAccount(id, sessionId, capability);
+        const results = await gatedWriters(
+          deleteFirst ? deletingAccount : writing,
+          deleteFirst ? writing : deletingAccount,
+        );
+        assert.equal(results[0].status, "fulfilled");
+        assert.equal(results[1].status, deleteFirst ? "rejected" : "fulfilled");
+        if (deleteFirst && results[1].status === "rejected")
+          assert.equal(results[1].reason.code, "unauthorized");
+        assert.equal(await clients[0].user.count({ where: { id } }), 0);
+        assert.equal(
+          await clients[0].workspace.count({ where: { userId: id } }),
+          0,
+        );
+        assert.equal(
+          await clients[0].workspaceSave.count({ where: { userId: id } }),
+          0,
+        );
+        assert.equal(
+          await clients[0].workspaceImport.count({ where: { userId: id } }),
+          0,
+        );
+        console.log(
+          `PASS atomic account deletion ${deleteFirst ? "before" : "after"} ${mode}`,
+        );
+      }
+    }
+    const pendingUser = await owner();
+    const pendingSession = randomUUID();
+    await clients[0].session.create({
+      data: {
+        id: pendingSession,
+        userId: pendingUser,
+        token: randomUUID(),
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const pendingCapability = await runAs(0, () =>
+      deletionCapability(pendingUser, pendingSession),
+    );
+    const statusRace = await gatedWriters(
+      () => deleteAccount(pendingUser, pendingSession, pendingCapability),
+      () => settleAccountDeletion(pendingCapability),
+    );
+    assert.equal(statusRace[0].status, "fulfilled");
+    assert.equal(statusRace[1].status, "fulfilled");
+    if (statusRace[1].status === "fulfilled")
+      assert.deepEqual(statusRace[1].value, { deleted: true });
+    console.log("PASS deletion-status check waits for account deletion commit");
     console.log(
-      "10 PostgreSQL lock checks passed (independent connections, READ COMMITTED).",
+      "15 PostgreSQL lock checks passed (independent connections, READ COMMITTED).",
     );
   } finally {
     globalPrisma.dayplanPrisma = previousPrisma;

@@ -183,7 +183,13 @@ export function SettingsDialog({
             <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm md:px-6">
               {panel === "account" &&
                 (ready ? (
-                  <AccountPanel ref={edit} />
+                  <AccountPanel
+                    ref={edit}
+                    openData={() => {
+                      edit.current?.commit();
+                      setPanel("data");
+                    }}
+                  />
                 ) : (
                   <DayplanLoading message="Loading your account…" />
                 ))}

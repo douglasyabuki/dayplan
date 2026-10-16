@@ -18,6 +18,10 @@ import { type TaskOperation } from "@/lib/tasks/operations";
 import { emptyWorkspace } from "@/lib/workspace/empty";
 import { seedWorkspace } from "@/lib/workspace/seed";
 import { GUEST_DATA_EVENT } from "@/stores/persistence/guest-events";
+import {
+  readDeletion,
+  subscribeDeletion,
+} from "@/stores/session/deletion-state";
 import { registerDeparture } from "@/stores/session/departure";
 import {
   AccountWorkspaceDataSource,
@@ -40,6 +44,10 @@ import { type GuestData, readGuestData } from "@/stores/workspace/guest-data";
 import { workspaceContent, WorkspaceHistory } from "@/stores/workspace/history";
 import { WorkspacePersistenceSession } from "@/stores/workspace/persistence-session";
 import { reducer } from "@/stores/workspace/reducer";
+import {
+  type SaveFeedback,
+  workspaceSaveFeedback,
+} from "@/stores/workspace/save-feedback";
 import { validateWorkspace } from "@/stores/workspace/validation";
 import type { Occurrence } from "@/types-and-constants/tasks";
 import type { Workspace } from "@/types-and-constants/workspace";
@@ -84,6 +92,8 @@ type Context = {
   persistenceKind: "browser" | "database";
   recoveryCode: string;
   busy: boolean;
+  deletionPaused: boolean;
+  saveFeedback: SaveFeedback;
   syncStatus: "Saved" | "Pending" | "Saving" | "Offline" | "Needs attention";
   syncAvailable: boolean;
   syncNow: () => Promise<boolean>;
@@ -145,7 +155,11 @@ export function WorkspaceProvider({
   const revision = useRef(0);
   const epoch = useRef(0);
   const [adoptionEpoch, setAdoptionEpoch] = useState(0);
-  const [activity, setActivity] = useState({ pending: false, saving: false });
+  const [activity, setActivity] = useState({
+    pending: false,
+    saving: false,
+    loading: true,
+  });
   const [online, setOnline] = useState(true);
   const remoteFlight = useRef(false);
   const [remoteRefreshing, setRemoteRefreshing] = useState(false);
@@ -192,6 +206,8 @@ export function WorkspaceProvider({
   );
   const [recoveryCode, setRecoveryCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deletionPaused, setDeletionPaused] = useState(false);
+  const [lifetime, setLifetime] = useState(0);
   const busyRef = useRef(false);
   const editsBlocked = useCallback(() => {
     if (busyRef.current) return true;
@@ -321,7 +337,13 @@ export function WorkspaceProvider({
       dataSource,
       storageFailure,
       () => {
-        if (scope.active) setActivity(scope.status);
+        if (scope.active) {
+          if (!loaded) {
+            busyRef.current = true;
+            setBusy(true);
+          }
+          setActivity({ ...scope.status, loading: !loaded });
+        }
       },
     );
     persistence.current = scope;
@@ -330,6 +352,23 @@ export function WorkspaceProvider({
     const unsubscribeRecovery = account?.subscribeRecovery(() => {
       if (scope.active) setRecoveryStorageError(account.recoveryStorageError);
     });
+    const updateDeletion = () => {
+      if (dataSource.owner.kind !== "account") return;
+      const paused = !!readDeletion(dataSource.owner.userId);
+      if (paused) {
+        scope.close();
+        busyRef.current = true;
+        setBusy(true);
+        setDeletionPaused(true);
+      } else if (!scope.active) {
+        busyRef.current = false;
+        setBusy(false);
+        setDeletionPaused(false);
+        setLifetime((value) => value + 1);
+      }
+    };
+    const unsubscribeDeletion = subscribeDeletion(updateDeletion);
+    updateDeletion();
     const unregister =
       account && dataSource.owner.kind === "account"
         ? registerDeparture(dataSource.owner.userId, {
@@ -364,12 +403,16 @@ export function WorkspaceProvider({
     scope.load(
       (restored) => {
         loaded = true;
+        busyRef.current = false;
+        setBusy(false);
         clearHistory();
         commit(restored ?? freshWorkspace());
         setReady(true);
       },
       (cause) => {
         loaded = true;
+        busyRef.current = false;
+        setBusy(false);
         clearHistory();
         skipFailureSnapshot.current = true;
         storageFailure(
@@ -391,10 +434,11 @@ export function WorkspaceProvider({
       unregister?.();
       scope.close();
       unsubscribeRecovery?.();
+      unsubscribeDeletion();
     };
     // The keyed owner boundary fixes the data source for this provider lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataSource]);
+  }, [dataSource, lifetime]);
   useEffect(() => {
     if (skipFailureSnapshot.current) {
       skipFailureSnapshot.current = false;
@@ -669,15 +713,19 @@ export function WorkspaceProvider({
     (dataSource instanceof AccountWorkspaceDataSource &&
       dataSource.hasPendingImport) ||
     (!!error && recoveryCode !== "network_error");
-  const syncStatus: Context["syncStatus"] = blockingSync
-    ? "Needs attention"
-    : !online || remoteOffline || recoveryCode === "network_error"
-      ? "Offline"
-      : busy || activity.saving
-        ? "Saving"
-        : activity.pending
-          ? "Pending"
-          : "Saved";
+  const saveFeedback = workspaceSaveFeedback({
+    database,
+    ready: ready && !activity.loading,
+    blocked: blockingSync,
+    offline: !online || remoteOffline || recoveryCode === "network_error",
+    pending: activity.pending,
+    saving: busy || activity.saving,
+    deletionPaused,
+    durableRecovery:
+      dataSource instanceof AccountWorkspaceDataSource &&
+      dataSource.hasDurableRecovery,
+  });
+  const syncStatus = saveFeedback.status;
   const syncAvailable =
     ready && database && online && !busy && !remoteRefreshing && !blockingSync;
 
@@ -877,6 +925,8 @@ export function WorkspaceProvider({
         persistenceKind: database ? "database" : "browser",
         recoveryCode,
         busy,
+        deletionPaused,
+        saveFeedback,
         adoptionEpoch,
         readEditorState: () => structuredClone(current.current),
         syncStatus,

@@ -34,6 +34,9 @@ export function AboutPanel() {
           <ArrowUpRight data-icon="inline-end" />
         </Button>
       </div>
+      <a href="/help" className="underline">
+        Help and contact
+      </a>
       <section aria-label="Getting started" className="flex flex-col gap-4">
         <h3 className="text-sm font-medium">Getting started</h3>
         {features.map(({ title, description }) => (
@@ -46,7 +49,7 @@ export function AboutPanel() {
         ))}
         <p className="text-muted-foreground text-sm leading-normal">
           Guest plans stay in this browser. When you sign in, you can import or
-          discard guest data in Account settings.
+          discard guest data in Data settings.
         </p>
       </section>
     </div>

@@ -353,8 +353,12 @@ test("unsupported account sessions do not read or mount the guest workspace", as
     </SessionProvider>,
   );
   await expect
-    .element(screen.getByRole("alert"))
-    .toMatchTextContent("not available yet");
+    .element(
+      screen.getByRole("heading", {
+        name: "Account workspace access could not be verified",
+      }),
+    )
+    .toHaveFocus();
   expect(reads).not.toHaveBeenCalled();
 });
 

@@ -13,6 +13,7 @@ import {
   metadataClass,
   taskInteractionBoundary,
 } from "@/components/tasks/task-interaction";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle } from "@/components/ui/popover";
 import { useWorkspaceController } from "@/contexts/workspace-controller";
 import type { TaskScope } from "@/lib/tasks/operations";
@@ -63,7 +64,12 @@ export function TaskMetadataButton({
 export function TaskQuickActionPopover({
   action,
 }: {
-  action: { task: Occurrence; kind: QuickActionKind; anchor: HTMLElement };
+  action: {
+    task: Occurrence;
+    kind: QuickActionKind;
+    anchor: HTMLElement;
+    positionAnchor: HTMLElement;
+  };
 }) {
   const workspace = useWorkspace();
   const controller = useWorkspaceController();
@@ -72,22 +78,27 @@ export function TaskQuickActionPopover({
   const [error, setError] = useState("");
   const task =
     resolveOccurrence(workspace.state, reference(action.task)) ?? action.task;
-  const dateAction = action.kind === "schedule" || action.kind === "deadline";
-  const positionAnchor = dateAction
-    ? (action.anchor.closest<HTMLElement>("[data-task-item]") ?? action.anchor)
-    : action.anchor;
   const draft = { ...task, ...pending };
   const close = controller.closeQuickAction;
   function patch(changes: Partial<Occurrence>) {
     const staged = { ...pending, ...changes };
+    if (action.kind === "location") {
+      setPending(staged);
+      setError("");
+      return;
+    }
+    commit(staged);
+  }
+  function commit(staged: Partial<Occurrence>) {
     try {
-      workspace.act(
+      const applied = workspace.act(
         taskDraftAction(workspace.state, task, { ...task, ...staged }, scope),
-        "Task updated",
+        action.kind === "location" ? "Task moved" : "Task updated",
       );
+      if (!applied) throw new Error("Unable to update task. Please try again.");
       setPending({});
       setError("");
-      if (action.kind === "priority") close();
+      if (action.kind === "priority" || action.kind === "location") close();
     } catch (cause) {
       setPending(staged);
       setError(
@@ -111,7 +122,7 @@ export function TaskQuickActionPopover({
     >
       <PopoverContent
         {...taskInteractionBoundary}
-        anchor={positionAnchor}
+        anchor={action.positionAnchor}
         align="start"
         side="bottom"
         collisionAvoidance={{ side: "flip", align: "shift" }}
@@ -168,6 +179,16 @@ export function TaskQuickActionPopover({
           <p role="alert" className="text-destructive text-sm">
             {error}
           </p>
+        )}
+        {action.kind === "location" && (
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={close}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => commit(pending)}>
+              Move
+            </Button>
+          </div>
         )}
       </PopoverContent>
     </Popover>

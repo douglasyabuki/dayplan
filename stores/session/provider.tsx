@@ -10,17 +10,26 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 
+import { AccountDeletionGuard } from "@/components/account/account-deletion-guard";
 import { authClient } from "@/lib/auth-client";
 import { navigateToSignIn } from "@/lib/auth-navigation";
 import { safeWorkspaceDestination } from "@/lib/workspace/entry";
 import { type AuthProvider, providerNames } from "@/types-and-constants/auth";
 
+import {
+  beginAccountDeletion,
+  checkAccountDeletionEligibility,
+} from "./account-deletion";
+import { readDeletion } from "./deletion-state";
 import { departureHandler } from "./departure";
 import type { Session } from "./model";
 
 const SessionContext = createContext<Session | null>(null);
 
 export type SessionActions = {
+  checkDeletionEligibility: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  reauthenticateDeletion: () => Promise<void>;
   signIn: (provider: AuthProvider, destination?: string) => Promise<void>;
   connect: (
     provider: AuthProvider,
@@ -89,13 +98,14 @@ function LiveSessionProvider({ children }: { children: ReactNode }) {
         (event as CustomEvent<{ sessionId: string }>).detail.sessionId ===
         sessionId
       ) {
+        if (query.data?.user.id && readDeletion(query.data.user.id)) return;
         flushSync(() => setBusy(true));
         void refetch().finally(() => setBusy(false));
       }
     };
     window.addEventListener("dayplan-session-invalid", invalid);
     return () => window.removeEventListener("dayplan-session-invalid", invalid);
-  }, [sessionId, refetch]);
+  }, [sessionId, refetch, query.data?.user.id]);
   const session: Session =
     busy || query.isPending
       ? { status: "loading" }
@@ -191,6 +201,31 @@ function LiveSessionProvider({ children }: { children: ReactNode }) {
   }
 
   const actions: SessionActions = {
+    checkDeletionEligibility: async () => {
+      if (pending.current || !query.data)
+        throw new Error("Wait for the current account action to finish.");
+      pending.current = true;
+      try {
+        await checkAccountDeletionEligibility(query.data.session.id);
+      } finally {
+        pending.current = false;
+      }
+    },
+    reauthenticateDeletion: () =>
+      run(async () => {
+        await logout();
+        navigateToSignIn("/today?settings=account");
+      }),
+    deleteAccount: async () => {
+      if (pending.current || !query.data)
+        throw new Error("Wait for the current account action to finish.");
+      pending.current = true;
+      try {
+        await beginAccountDeletion(query.data.user.id, query.data.session.id);
+      } finally {
+        pending.current = false;
+      }
+    },
     busy: busy || preparing,
     pendingAction,
     requiresReauthentication,
@@ -283,6 +318,7 @@ function LiveSessionProvider({ children }: { children: ReactNode }) {
     <SessionActionsContext.Provider value={actions}>
       <SessionContext.Provider value={session}>
         {children}
+        <AccountDeletionGuard />
       </SessionContext.Provider>
     </SessionActionsContext.Provider>
   );
@@ -292,6 +328,10 @@ export function useSession(): Session {
   const session = useContext(SessionContext);
   if (!session) throw new Error("SessionProvider is required");
   return session;
+}
+
+export function useOptionalSession(): Session | null {
+  return useContext(SessionContext);
 }
 
 export function useSessionActions(): SessionActions | null {
