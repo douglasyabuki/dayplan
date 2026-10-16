@@ -297,7 +297,7 @@ test("guest Account settings migrate only a saved name and preserve save/cancel 
   ).toHaveCount(0);
   await expect(
     dialog.getByRole("button", { name: "Delete account", exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   await input.fill("  New name  ");
   await input.press("Enter");
   await expect(dialog.getByText("Name saved.", { exact: true })).toBeVisible();

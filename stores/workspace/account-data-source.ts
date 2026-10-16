@@ -1,6 +1,10 @@
 import type { AccountProfile } from "@/stores/account/model";
 import type { ProfileDataSource } from "@/stores/account/persistence";
 import { notifyGuestDataChanged } from "@/stores/persistence/guest-events";
+import {
+  assertAccountActive,
+  readDeletion,
+} from "@/stores/session/deletion-state";
 import type { WorkspaceOwner } from "@/stores/session/model";
 import type { WorkspaceDataSource } from "@/stores/workspace/data-source";
 import { validateWorkspace } from "@/stores/workspace/validation";
@@ -76,6 +80,7 @@ class AccountConnection {
     body?: unknown,
     method = "POST",
   ): Promise<T> {
+    if (this.owner.kind === "account") assertAccountActive(this.owner.userId);
     signal.throwIfAborted();
     const sessionId = this.sessionId;
     let response: Response;
@@ -123,6 +128,7 @@ class AccountConnection {
       );
     }
     signal.throwIfAborted();
+    if (this.owner.kind === "account") assertAccountActive(this.owner.userId);
     return result as T;
   }
 }
@@ -175,6 +181,7 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   }
 
   retryGuestCleanup() {
+    if (readDeletion(this.accountId)) return;
     if (!this.cleanupJournal?.confirmed) return;
     const result = cleanupGuestData(this.cleanupJournal.target);
     this.guestCleanupError = result.error;
@@ -206,6 +213,7 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   }
 
   discardGuest(target: GuestData) {
+    assertAccountActive(this.accountId);
     if (this.pendingImport)
       throw new Error(
         "Resolve the pending import before discarding guest data.",
@@ -230,6 +238,7 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   }
 
   private finishGuestCleanup(journal: GuestCleanupJournal) {
+    if (readDeletion(this.accountId)) return;
     this.cleanupJournal = { ...journal, confirmed: true };
     // A lost journal write must not turn a confirmed account import into a failure.
     // The server receipt still proves completion when reopening the app.
@@ -380,6 +389,7 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
   }
 
   private async persistNow(signal: AbortSignal) {
+    assertAccountActive(this.accountId);
     const record = this.record();
     // Construct cancellation under the journal lock from current state, never
     // from the snapshot captured when staging was queued. Keep latest until
@@ -415,6 +425,7 @@ export class AccountWorkspaceDataSource implements WorkspaceDataSource {
 
   /** Stage edits immediately, independently of the network debounce. */
   stage(snapshot: Workspace, signal: AbortSignal): Promise<void> {
+    assertAccountActive(this.accountId);
     signal.throwIfAborted();
     const unchanged =
       JSON.stringify(snapshot) === JSON.stringify(this.latest) ||
@@ -947,4 +958,8 @@ export function accountDataSources(
   }
   sources.connection.sessionId = sessionId;
   return sources;
+}
+
+export function forgetAccountDataSources(userId: string) {
+  accounts.delete(userId);
 }

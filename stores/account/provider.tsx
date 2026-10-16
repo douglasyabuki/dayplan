@@ -10,6 +10,10 @@ import {
 } from "react";
 
 import { isPromise, serialized } from "@/stores/persistence/queue";
+import {
+  readDeletion,
+  subscribeDeletion,
+} from "@/stores/session/deletion-state";
 
 import {
   type AccountProfile,
@@ -48,11 +52,23 @@ export function AccountProvider({
   const scope = useRef<AbortController | null>(null);
   const pending = useRef(false);
   const hasAccount = dataSource.owner.kind === "account";
+  const [lifetime, setLifetime] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     scope.current = controller;
     const signal = controller.signal;
+    const changed = () => {
+      if (dataSource.owner.kind !== "account") return;
+      if (readDeletion(dataSource.owner.userId)) controller.abort();
+      else if (controller.signal.aborted) {
+        pending.current = false;
+        setUpdateStatus("idle");
+        setLifetime((value) => value + 1);
+      }
+    };
+    const unsubscribe = subscribeDeletion(changed);
+    changed();
     const failed = () => {
       if (!signal.aborted)
         setAccount({
@@ -86,8 +102,11 @@ export function AccountProvider({
     } catch {
       failed();
     }
-    return () => controller.abort();
-  }, [dataSource, hasAccount]);
+    return () => {
+      controller.abort();
+      unsubscribe();
+    };
+  }, [dataSource, hasAccount, lifetime]);
 
   async function updateName(value: string): Promise<boolean> {
     const controller = scope.current;
@@ -98,6 +117,11 @@ export function AccountProvider({
       !account.ready ||
       !name ||
       pending.current
+    )
+      return false;
+    if (
+      dataSource.owner.kind === "account" &&
+      readDeletion(dataSource.owner.userId)
     )
       return false;
     if (name === current.current.name) return true;

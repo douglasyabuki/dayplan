@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, UserRoundX } from "lucide-react";
+import { Camera } from "lucide-react";
 import {
   type Ref,
   useEffect,
@@ -25,13 +25,20 @@ import { useAccount } from "@/stores/account/provider";
 import { AccountAvatar } from "./account-avatar";
 import { AuthControls } from "./auth-controls";
 import { ConnectedAccounts } from "./connected-accounts";
+import { DeleteAccount } from "./delete-account";
 
 export type AccountEditHandle = {
   commit: () => Promise<boolean>;
   cancel: () => void;
 };
 
-export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
+export function AccountPanel({
+  ref,
+  openData,
+}: {
+  ref?: Ref<AccountEditHandle>;
+  openData?: () => void;
+}) {
   const {
     profile,
     ready,
@@ -214,20 +221,21 @@ export function AccountPanel({ ref }: { ref?: Ref<AccountEditHandle> }) {
         </>
       )}
       <Separator />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-destructive text-sm font-medium">Delete account</p>
-          <p className="text-muted-foreground text-sm">
-            {capabilities.hasAccount
-              ? "Not available yet"
-              : "Guests have no account to delete."}
+      {capabilities.hasAccount ? (
+        <DeleteAccount email={profile.email} beforeReauthentication={commit} />
+      ) : (
+        <div className="flex flex-col items-start gap-2">
+          <p>
+            Guests have no account to delete. Manage this browser&apos;s
+            workspace in Data settings.
           </p>
+          {openData && (
+            <Button variant="outline" onClick={openData}>
+              Open Data settings
+            </Button>
+          )}
         </div>
-        <Button variant="destructive" disabled>
-          <UserRoundX data-icon="inline-start" aria-hidden="true" />
-          Delete account
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

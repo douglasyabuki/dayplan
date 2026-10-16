@@ -1,3 +1,7 @@
+import {
+  assertAccountActive,
+  readDeletion,
+} from "@/stores/session/deletion-state";
 import type { Workspace } from "@/types-and-constants/workspace";
 
 import { CoordinationError } from "./coordination";
@@ -188,12 +192,19 @@ export async function writeRecovery(
   signal: AbortSignal,
   onCommitted?: () => void,
 ): Promise<void> {
+  assertAccountActive(record.userId);
   validate(record);
   let stale = false;
+  let paused = false;
   try {
     await transaction<void>(signal, "readwrite", (store, done) => {
       const request = store.get([record.userId, record.writerId]);
       request.onsuccess = () => {
+        if (readDeletion(record.userId)) {
+          paused = true;
+          store.transaction.abort();
+          return;
+        }
         if ((request.result?.sequence ?? 0) !== expectedSequence) {
           stale = true;
           store.transaction.abort();
@@ -204,6 +215,8 @@ export async function writeRecovery(
       };
     });
   } catch (error) {
+    if (paused)
+      throw new Error("Recovery writes are paused for account deletion.");
     if (stale) throw new CoordinationError();
     throw error;
   }
@@ -211,4 +224,16 @@ export async function writeRecovery(
   const stored = await readRecovery(record.userId, record.writerId, signal);
   if (JSON.stringify(stored) !== JSON.stringify(record))
     throw new RecoveryStorageError();
+}
+
+/** Removes every writer for exactly one account, including corrupt records. */
+export function purgeAccountRecovery(
+  userId: string,
+  signal: AbortSignal,
+): Promise<void> {
+  return transaction(signal, "readwrite", (store, done) => {
+    // The prefix range includes malformed writer keys as well as UUID strings.
+    store.delete(IDBKeyRange.bound([userId], [userId + "\0"], false, true));
+    done(undefined);
+  });
 }
