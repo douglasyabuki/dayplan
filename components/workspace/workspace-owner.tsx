@@ -3,7 +3,7 @@
 import { type ReactNode, useMemo } from "react";
 
 import { AuthControls, SessionError } from "@/components/account/auth-controls";
-import { RecoveryScreen } from "@/components/shared/recovery-screen";
+import { ErrorScreen } from "@/components/shared/error-screen";
 import {
   guestProfileDataSource,
   type ProfileDataSource,
@@ -73,7 +73,7 @@ export function WorkspaceOwnerBoundary({
   if (!sources)
     return (
       <div className="flex flex-col gap-3 p-6">
-        <RecoveryScreen
+        <ErrorScreen
           title="Account workspace access could not be verified"
           description="Retry loading or sign in again to restore account access. Your account data has not been replaced with guest data."
           retry={() => window.location.reload()}

@@ -7,6 +7,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toast";
 import { OnboardingProvider } from "@/stores/onboarding/provider";
 import { SessionProvider } from "@/stores/session/provider";
+import { THEME_INIT_SCRIPT } from "@/stores/theme";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,10 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       )}
     >
       <head>
-        {/* Apply the system theme before paint; saved preferences take over after hydration. */}
-        <script>
-          {`document.documentElement.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches);`}
-        </script>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="app-scrollbar flex min-h-full flex-col">
         <SessionProvider>
