@@ -23,6 +23,7 @@ import {
   subscribeDeletion,
 } from "@/stores/session/deletion-state";
 import { registerDeparture } from "@/stores/session/departure";
+import { applyThemePreference, rememberThemePreference } from "@/stores/theme";
 import {
   AccountWorkspaceDataSource,
   type ImportPreview,
@@ -453,16 +454,15 @@ export function WorkspaceProvider({
     return () => clearInterval(timer);
   }, [state.timezone]);
   useEffect(() => {
+    if (!ready) return;
+    // A fallback workspace must not overwrite the saved theme during recovery.
+    if (!error) rememberThemePreference(state.theme);
     const media = matchMedia("(prefers-color-scheme: dark)");
-    const apply = () =>
-      document.documentElement.classList.toggle(
-        "dark",
-        state.theme === "dark" || (state.theme === "system" && media.matches),
-      );
+    const apply = () => applyThemePreference(state.theme);
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [state.theme]);
+  }, [state.theme, ready, error]);
   useEffect(() => {
     if (!notice) return;
     const id = toast.add({

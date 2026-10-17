@@ -33,7 +33,7 @@ import {
   KanbanSectionBoard,
   ListSectionGroups,
 } from "@/components/sections/task-sections";
-import { RecoveryScreen } from "@/components/shared/recovery-screen";
+import { NotFoundScreen } from "@/components/shared/not-found-screen";
 import { SectionRemovalDropZone } from "@/components/tasks/task-drag-feedback";
 import { KanbanTaskBoard, TaskList } from "@/components/tasks/task-groups";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -227,7 +227,7 @@ export function WorkspaceView({
     !selectedEntity
   )
     return (
-      <RecoveryScreen
+      <NotFoundScreen
         title={view === "projects" ? "Project not found" : "Tag not found"}
         description="This item may have been deleted or belongs to another workspace. Choose an existing collection to continue."
         collection={view}
