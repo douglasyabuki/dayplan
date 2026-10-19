@@ -46,7 +46,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/temp
 .vscode*
 docs/todo.md
 

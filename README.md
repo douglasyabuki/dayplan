@@ -125,7 +125,7 @@ Dates without a time remain calendar dates. Timed values represent local wall-cl
 
 Recurring occurrences have stable `seriesId@date` identities. Individual edits and completion persist as exceptions; ordinary future occurrences are generated for the requested range. Editing a series preserves exceptions and completed history. Archive applies to the series independently of completion.
 
-`app/api/` exposes authentication, auth availability, profile, workspace, and guest-import endpoints. Workspace routes support public guest access; account reads and writes verify the server session and derive ownership from it. Account mutations also validate the request origin. The standalone `temp/my-prisma-postgres-app` example is excluded from the root app's TypeScript and lint scopes.
+`app/api/` exposes authentication, auth availability, profile, workspace, and guest-import endpoints. Workspace routes support public guest access; account reads and writes verify the server session and derive ownership from it. Account mutations also validate the request origin.
 
 ## Validation
 
